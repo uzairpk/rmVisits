@@ -33,11 +33,29 @@
     <section id="page-dashboard" class="page active">
       <header class="page-header">
         <h1>Dashboard</h1>
-        <p class="muted">KPI cards and charts will appear here in a later phase.</p>
+        <p class="muted">Temporary Phase 2 view of calculated KPIs. Charts come in the next phase.</p>
       </header>
-      <div class="placeholder-card">
-        <h2>Coming next</h2>
-        <p>Phase 1 is uploads and master data. After you save territory structure and RM master, visit logs and this dashboard will be added.</p>
+      <div class="stack">
+        <article class="card">
+          <div class="card-head">
+            <div>
+              <h2>RM Summary</h2>
+              <p class="muted" id="summary-meta">Upload a visit log to see monthly KPIs.</p>
+            </div>
+            <select id="dash-month" class="select" hidden></select>
+          </div>
+          <div class="table-wrap table-wrap-wide" id="table-summary"></div>
+        </article>
+        <article class="card">
+          <div class="card-head">
+            <div>
+              <h2>Day Detail</h2>
+              <p class="muted" id="day-meta">Pick an RM to see each day.</p>
+            </div>
+            <select id="dash-rm" class="select" hidden></select>
+          </div>
+          <div class="table-wrap table-wrap-wide" id="table-days"></div>
+        </article>
       </div>
     </section>
 
@@ -70,6 +88,22 @@
             <span class="dropzone-file" id="name-rm">No file selected</span>
           </label>
           <div class="preview-wrap" id="preview-rm" hidden></div>
+        </article>
+
+        <article class="card upload-card upload-card-wide" data-upload="visits">
+          <h2>Visit log</h2>
+          <p class="muted">Upload each month. Saving replaces that month’s visits. Extra columns, empty rows, and a Total row are ignored.</p>
+          <p class="cols">Needed columns: <code>Region</code> · <code>Manager Name</code> · <code>Date</code> · <code>Territory</code> · <code>Planned Town</code> · <code>Tracker Presence</code> · trip/prod times · <code>Status</code> · <code>Remarks</code></p>
+          <label class="dropzone">
+            <input type="file" id="file-visits" accept=".xlsx,.xls" />
+            <span class="dropzone-title">Choose Excel file</span>
+            <span class="dropzone-file" id="name-visits">No file selected</span>
+          </label>
+          <div id="visit-sheet-wrap" class="sheet-pick" hidden>
+            <label for="visit-sheet">Sheet</label>
+            <select id="visit-sheet" class="select"></select>
+          </div>
+          <div class="preview-wrap preview-wide" id="preview-visits" hidden></div>
         </article>
       </div>
     </section>
@@ -136,9 +170,9 @@
   <script src="libs/xlsx.full.min.js"></script>
   <script src="libs/chart.umd.min.js"></script>
   <script src="js/db.js"></script>
+  <script src="js/calculations.js"></script>
   <script src="js/app.js"></script>
   <script src="js/upload.js"></script>
-  <script src="js/calculations.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/reports.js"></script>
 </body>

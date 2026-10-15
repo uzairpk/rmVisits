@@ -1,5 +1,5 @@
 const DB_NAME = "rmVisits";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function openDb() {
   return new Promise((resolve, reject) => {
@@ -11,6 +11,9 @@ function openDb() {
       }
       if (!db.objectStoreNames.contains("rmMaster")) {
         db.createObjectStore("rmMaster", { keyPath: "month" });
+      }
+      if (!db.objectStoreNames.contains("visitLog")) {
+        db.createObjectStore("visitLog", { keyPath: "month" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -86,11 +89,52 @@ async function getRmMonth(month) {
   return rec;
 }
 
+async function saveVisitMonth(month, rows) {
+  const db = await openDb();
+  const tx = db.transaction("visitLog", "readwrite");
+  tx.objectStore("visitLog").put({
+    month: String(month),
+    rows: rows,
+    savedAt: new Date().toISOString()
+  });
+  await txDone(tx);
+  db.close();
+}
+
+async function getVisitMonth(month) {
+  const db = await openDb();
+  const tx = db.transaction("visitLog", "readonly");
+  const rec = await new Promise((resolve, reject) => {
+    const req = tx.objectStore("visitLog").get(String(month));
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+  db.close();
+  return rec;
+}
+
+async function getAllVisitLogs() {
+  const db = await openDb();
+  if (!db.objectStoreNames.contains("visitLog")) {
+    db.close();
+    return [];
+  }
+  const tx = db.transaction("visitLog", "readonly");
+  const list = await new Promise((resolve, reject) => {
+    const req = tx.objectStore("visitLog").getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+  db.close();
+  return list.sort((a, b) => String(a.month).localeCompare(String(b.month)));
+}
+
 async function clearAllData() {
   const db = await openDb();
-  const tx = db.transaction(["territory", "rmMaster"], "readwrite");
-  tx.objectStore("territory").clear();
-  tx.objectStore("rmMaster").clear();
+  const names = ["territory", "rmMaster"];
+  if (db.objectStoreNames.contains("visitLog")) names.push("visitLog");
+  const tx = db.transaction(names, "readwrite");
+  names.forEach((n) => tx.objectStore(n).clear());
   await txDone(tx);
   db.close();
 }

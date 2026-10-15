@@ -36,6 +36,7 @@ function setPage(name) {
     a.classList.toggle("active", a.dataset.page === name);
   });
   if (name === "master") refreshMasterData();
+  if (name === "dashboard" && typeof refreshDashboard === "function") refreshDashboard();
 }
 
 function onHashChange() {
@@ -168,12 +169,13 @@ document.getElementById("rm-month-filter").addEventListener("change", drawRmTabl
 document.getElementById("clear-data-btn").addEventListener("click", async () => {
   const ok = await confirmModal(
     "Clear all data?",
-    "This removes the territory structure and every RM master month saved in this browser. It cannot be undone.",
+    "This removes the territory structure, RM master, and visit logs saved in this browser. It cannot be undone.",
     "Clear data"
   );
   if (!ok) return;
   await clearAllData();
   await refreshMasterData();
+  if (typeof refreshDashboard === "function") await refreshDashboard();
   showToast("All saved data was cleared.");
 });
 

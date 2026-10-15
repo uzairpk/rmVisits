@@ -23,12 +23,33 @@ Columns: `Month | Region | RM Name | Base Town | Target Visits`
 - Example: `10 | CEN | Afzal Cheema | FSD-1 | 18`
 
 ### 3.3 Visit log (upload monthly, may be re-uploaded during the month)
-Columns (same as current "Raw Data" sheet):
-`Region | Manager Name | Date | Territory | Planned Town | Tracker Presence | Trip Start Time | Trip End Time | Prod. Start Time | Prod. End Time | Status | Remarks`
-- A row counts as a visit only when Status = "Market Visit". There is no separate VISITS column.
-- If a column named VISITS exists in an uploaded file, ignore it.
-- `Tracker Presence` = town where the RM actually was (from tracker).
-- `Status` values: Market Visit, Meeting, Transit, Officework, Leave.
+One row per RM per town visited per day (or one row per day for Leave / Meeting / Officework / Transit).
+The header row may not be row 1 – detect the row that contains these headers. Match headers ignoring case and extra spaces
+(e.g. "Remarks " with a trailing space).
+
+| # | Column | Data type | Required | Example | Notes |
+|---|--------|-----------|----------|---------|-------|
+| 1 | Region | Text | Yes | CEN | Must exist in territory structure |
+| 2 | Manager Name | Text | Yes | AFZAL CHEEMA | RM name; must match RM master (fuzzy, case-insensitive) |
+| 3 | Date | Date | Yes | 01-Oct-2026 | Excel date; month of upload is taken from this |
+| 4 | Day | Text | No | Thu | Ignored – app derives it from Date |
+| 5 | Territory | Text | For Market Visit | GOR | Territory code |
+| 6 | Planned Town | Text | For Market Visit | Samundari | Town the RM planned to visit |
+| 7 | Tracker Presence | Text | For Market Visit | Dijkot | Town where tracker shows RM actually was – FINAL for visits |
+| 8 | Trip Start Time | Time (hh:mm) | For Market Visit | 12:13 | Excel time value |
+| 9 | Trip End Time | Time (hh:mm) | For Market Visit | 17:09 | Must be after Trip Start |
+| 10 | Total Trip Time | Number (hrs) | No | 4.93 | Ignored – app recalculates |
+| 11 | Prod. Start Time | Time (hh:mm) | For Market Visit | 12:41 | Start of productive time in market |
+| 12 | Prod. End Time | Time (hh:mm) | For Market Visit | 13:55 | Must be after Prod. Start |
+| 13 | Total Prod Time | Number (hrs) | No | 1.23 | Ignored – app recalculates |
+| 14 | Travel Time | Number (hrs) | No | 3.70 | Ignored – app recalculates |
+| 15 | Status | Text (list) | Yes | Market Visit | One of: Market Visit, Meeting, Transit, Officework, Leave |
+| 16 | Remarks | Text | No | Monthly Meeting | Free text |
+
+- A row counts as a visit only when Status = "Market Visit".
+- Rows with Status other than Market Visit usually have blank times and towns – that is valid.
+- Ignore fully empty rows, a "Total" row, and any extra columns not listed above (e.g. VISITS, SOP Visit, Unique Visit).
+- `Prod.` = productive time (time actually working in the market, not travelling).
 - Re-uploading the same month replaces that month's visit data.
 
 ### 3.4 Upload validation
@@ -37,49 +58,72 @@ Columns (same as current "Raw Data" sheet):
 - RM names must match the RM master (current sheet has "Afzaal Cheema" vs "AFZAL CHEEMA" – matching must
   be case-insensitive and trimmed; show unmatched names so I can fix them).
 
-## 4. Calculations (business rules – from the current Excel formulas)
-Per visit row:
-- **Total Trip Time (hrs)** = Trip End − Trip Start
-- **Total Prod Time (hrs)** = Prod End − Prod Start
-- **Travel Time (hrs)** = Total Trip Time − Total Prod Time
-- **Visit** = row where Status = Market Visit
-- **Base Town Visit** = Visit where Tracker Presence = RM's Base Town
-- **SOP Visit** = Visit with Prod Time ≥ 2 hrs
-- **Red Visit** = SOP Visit with Prod Time < 3 hrs  *(confirm rule)*
-- **Visit Day** = unique (Date + RM) combination with at least one visit
+## 4. Calculations (business rules – confirmed)
 
-Per RM per month:
-- **Target** = from RM master
-- **Achieved** = count of Visit Days *(confirm: visit days or total visits?)*
-- **Achievement %** = Achieved ÷ Target
-- **Leaves** = count of days with Status = Leave
-- **Meetings** = count of days with Status = Meeting
-- **Officework days**, **Transit days**
-- **Base Town Visits**, **SOP Visits**, **Red Visits**
-- **Total / avg trip time, prod time, travel time**
+### 4.1 Per visit row
+- **Visit** = row where Status = Market Visit
+- **Total Trip Time (hrs)** = Trip End − Trip Start
+- **Total Productive Time (hrs)** = Prod. End Time − Prod. Start Time
+  (productive = time actually spent working in the market, not travelling)
+- **Travel Time (hrs)** = Total Trip Time − Total Productive Time
+- **Visited Town** = Tracker Presence (this is final for all "visited" logic)
+- **Plan Deviation** = Visit where Planned Town ≠ Tracker Presence (compare case-insensitive, trimmed)
+
+### 4.2 Per RM per day (a "Field Day")
+- **Field Day** = a date where the RM has at least one Visit (Market Visit row)
+- **Towns visited that day** = list of distinct Tracker Presence towns on that day
+- **Daily Productive Time** = sum of Total Productive Time of all visits that day
+- **Valid Visit Day (SOP Day)** = Field Day with Daily Productive Time ≥ 2 hrs. ONLY these days count toward target.
+- **Red Day** = Valid Visit Day with Daily Productive Time ≥ 2 and < 3 hrs (counts toward target, but flagged red)
+- **Green Day** = Valid Visit Day with Daily Productive Time ≥ 3 hrs
+- **Invalid Day** = Field Day with Daily Productive Time < 2 hrs. Does NOT count toward target; shown separately.
+- **Base Town Day** = Valid Visit Day where the ONLY town visited all day is the RM's Base Town.
+  If the RM visited the base town plus any other town that day, it is NOT a Base Town Day.
+- **Leave Day** = date with Status = Leave
+- **Meeting Day** = date with Status = Meeting
+- **Officework Day** = date with Status = Officework
+- **Transit Day** = date with Status = Transit
+
+### 4.3 Per RM per month
+- **Target** = Target Visits from RM master
+- **Adjusted Target** = Target − Leave Days  (only leaves reduce target; meetings do not)
+- **Achieved** = number of Valid Visit Days (productive time ≥ 2 hrs that day)
+- **Achievement %** = Achieved ÷ Adjusted Target
+- **Total Visits** = number of visit rows (town visits)
+- **Unique Towns Visited** = distinct Tracker Presence towns
+- **Field Days**, **Valid Visit Days**, **Green Days**, **Red Days**, **Invalid Days**, **Base Town Days**
+- Base Town Days are included in Achieved; they are also shown separately
+- **Leave Days**, **Meeting Days**, **Officework Days**, **Transit Days**
+- **Plan Adherence %** = visits where Planned Town = Tracker Presence ÷ Total Visits
+- **Plan Deviation %** = 100% − Plan Adherence %
+- **Total and average** trip time, productive time, travel time (average per Field Day)
 - **Territories not visited** = territories in the RM's region with zero visits this month
-- **Towns not visited** = towns in the RM's region with zero visits (based on Tracker Presence)
+  (a territory is visited if any of its towns appears in Tracker Presence)
+- **Towns not visited** = towns in the RM's region with no visit (by Tracker Presence)
+- **Coverage %** = towns visited ÷ total towns in RM's region
 - **Visits per territory / per town**
 
 ## 5. Dashboard (main screen)
 - Filters: Month, Zone, Region, RM
-- KPI cards: Target vs Achieved (%), Total Visits, SOP Visits, Red Visits, Base Town Visits, Leaves, Meetings,
+- KPI cards: Adjusted Target vs Achieved (%), Valid Visit Days, Total Visits, Green Days, Red Days, Invalid Days, Base Town Days, Leaves, Meetings, Plan Adherence %,
   Territories not visited, Towns not visited
 - Charts:
   - Target vs Achieved by RM (bar)
   - Daily visit trend for the month (line)
-  - Time split: Prod vs Travel time by RM (stacked bar)
+  - Time split: Productive vs Travel time by RM (stacked bar)
   - Day status mix: Market Visit / Meeting / Leave / Officework / Transit (by RM)
   - Coverage: % of towns visited per region
+  - Plan vs Actual: Plan Adherence % by RM, plus a table of deviations (date, planned town, actual town)
 - RM ranking table (sortable) with conditional colours (green ≥ 100%, amber 70–99%, red < 70%)
 - Style: dark, clean, professional (similar to a modern Power BI dark theme)
 
 ## 6. Reports (each exportable to Excel and PDF)
 1. **RM Monthly Summary** – one row per RM with all KPIs from section 4
-2. **RM Day-wise Detail** – calendar-style view per RM: date, status, towns, trip/prod/travel time
+2. **RM Day-wise Detail** – calendar-style view per RM: date, status, towns, trip/productive/travel time
 3. **Not Visited Report** – territories and towns not visited, by region/RM
 4. **Town Coverage Report** – visits per town and territory
 5. **Leave & Meeting Report** – dates and remarks per RM
+6. **Plan Deviation Report** – every visit where planned town ≠ tracker town
 
 ## 7. Tech (for Cursor)
 - Plain HTML + CSS + JavaScript only. No Node.js server, no database, no build step.
@@ -107,9 +151,3 @@ Per RM per month:
 3. Dashboard (section 5)
 4. Reports + Excel/PDF export (section 6)
 5. Later (optional): shared online version with login and central database
-
-## 9. Open questions
-- Target achieved = number of visit days, or number of visits (a day can have 2 towns)?
-- Red Visit rule: is it "SOP visit with prod time < 3 hrs", or something else?
-- Do leaves/meetings reduce the RM's target (e.g. target 18, 2 leaves → 16)?
-- Should "not visited" use Tracker Presence town or Planned Town?
