@@ -31,28 +31,98 @@
 
   <main class="main">
     <section id="page-dashboard" class="page active">
-      <header class="page-header">
-        <h1>Dashboard</h1>
-        <p class="muted">Temporary Phase 2 view of calculated KPIs. Charts come in the next phase.</p>
+      <header class="page-header dash-header">
+        <div>
+          <h1>Dashboard</h1>
+          <p class="muted" id="dash-subtitle">Upload a visit log to see performance for the month.</p>
+        </div>
       </header>
-      <div class="stack">
+
+      <div class="filter-bar" id="dash-filters">
+        <label class="filter-item">Month
+          <select id="dash-month" class="select"></select>
+        </label>
+        <label class="filter-item">Zone
+          <select id="filter-zone" class="select">
+            <option value="all">All zones</option>
+          </select>
+        </label>
+        <label class="filter-item">Region
+          <select id="filter-region" class="select">
+            <option value="all">All regions</option>
+          </select>
+        </label>
+        <label class="filter-item">RM
+          <select id="filter-rm" class="select">
+            <option value="all">All RMs</option>
+          </select>
+        </label>
+      </div>
+
+      <div id="dash-empty" class="placeholder-card" hidden>
+        <h2>No visit data yet</h2>
+        <p>Upload territory structure, RM master, and a visit log on the Uploads page. This dashboard will fill in automatically.</p>
+      </div>
+
+      <div id="dash-body">
+        <div class="kpi-grid" id="kpi-grid"></div>
+
+        <div class="alert-grid" id="alert-grid"></div>
+
+        <div class="chart-grid">
+          <article class="card chart-card">
+            <h2>Achieved vs adjusted target</h2>
+            <div class="chart-box chart-box-tall"><canvas id="chart-achieve"></canvas></div>
+          </article>
+          <article class="card chart-card">
+            <h2>Daily valid visit days</h2>
+            <div class="chart-box"><canvas id="chart-trend"></canvas></div>
+          </article>
+          <article class="card chart-card">
+            <h2>Productive vs travel hours</h2>
+            <div class="chart-box chart-box-tall"><canvas id="chart-time"></canvas></div>
+          </article>
+          <article class="card chart-card">
+            <h2>Day type mix</h2>
+            <div class="chart-box chart-box-tall"><canvas id="chart-mix"></canvas></div>
+          </article>
+          <article class="card chart-card">
+            <h2>Town coverage by region</h2>
+            <div class="chart-box"><canvas id="chart-coverage"></canvas></div>
+          </article>
+          <article class="card chart-card">
+            <h2>Plan adherence by RM</h2>
+            <div class="chart-box chart-box-tall"><canvas id="chart-plan"></canvas></div>
+          </article>
+        </div>
+
+        <article class="card">
+          <div class="card-head">
+            <div>
+              <h2>RM ranking</h2>
+              <p class="muted">Click a column to sort. Click a row to open that RM’s day detail.</p>
+            </div>
+          </div>
+          <div class="table-wrap" id="table-ranking"></div>
+        </article>
+
         <article class="card">
           <div class="card-head">
             <div>
               <h2>RM Summary</h2>
-              <p class="muted" id="summary-meta">Upload a visit log to see monthly KPIs.</p>
+              <p class="muted" id="summary-meta">Full KPI list for the current filters.</p>
             </div>
-            <select id="dash-month" class="select" hidden></select>
           </div>
           <div class="table-wrap table-wrap-wide" id="table-summary"></div>
         </article>
-        <article class="card">
+
+        <article class="card" id="card-days">
           <div class="card-head">
             <div>
               <h2>Day Detail</h2>
               <p class="muted" id="day-meta">Pick an RM to see each day.</p>
             </div>
-            <select id="dash-rm" class="select" hidden></select>
+            <select id="dash-rm" class="select"></select>
           </div>
           <div class="table-wrap table-wrap-wide" id="table-days"></div>
         </article>

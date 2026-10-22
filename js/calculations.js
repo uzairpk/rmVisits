@@ -276,6 +276,14 @@ function countTrue(days, prop) {
 function summarizeRmMonth(rmMasterRow, visitRows, territoryRows) {
   var rmName = rmMasterRow.rmName;
   var region = rmMasterRow.region;
+  var zone = "";
+  (territoryRows || []).some(function (t) {
+    if (collapseSpaces(t.region).toLowerCase() === collapseSpaces(region).toLowerCase()) {
+      zone = t.zone;
+      return true;
+    }
+    return false;
+  });
   var days = buildDayRecords(visitRows, rmMasterRow);
   var enriched = (visitRows || []).map(enrichVisitRow);
   var visits = enriched.filter(function (r) { return r.isVisit; });
@@ -343,6 +351,7 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows) {
   return {
     rmName: rmName,
     region: region,
+    zone: zone,
     baseTown: rmMasterRow.baseTown,
     target: target,
     leaveDays: leaveDays,
@@ -362,6 +371,7 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows) {
     meetingDays: countTrue(days, "isMeeting"),
     officeworkDays: countTrue(days, "isOfficework"),
     transitDays: countTrue(days, "isTransit"),
+    planMatchCount: planMatchCount,
     planAdherencePct: planAdherence,
     planAdherenceLabel: formatPct(planAdherence),
     planDeviationPct: planDeviation,
@@ -376,6 +386,8 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows) {
     territoriesNotVisitedList: territoriesNotVisited.join(", "),
     townsNotVisited: townsNotVisited.length,
     townsNotVisitedList: townsNotVisited.join(", "),
+    regionTownCount: regionTownNames.length,
+    townsVisitedInRegionCount: townsVisitedInRegion.length,
     coveragePct: regionTownNames.length ? pct(townsVisitedInRegion.length, regionTownNames.length) : null,
     coverageLabel: regionTownNames.length ? formatPct(pct(townsVisitedInRegion.length, regionTownNames.length)) : "—",
     visitsPerTerritory: dictText(visitsPerTerritory),
