@@ -4,6 +4,7 @@
 
 var STATUS_VISIT = "marketvisit";
 var STATUS_LEAVE = "leave";
+var STATUS_HOLIDAY = "holiday";
 var STATUS_MEETING = "meeting";
 var STATUS_OFFICE = "officework";
 var STATUS_TRANSIT = "transit";
@@ -115,18 +116,108 @@ function hoursBetween(startMin, endMin) {
   return round2((b - a) / 60);
 }
 
-/* Section 4.1 – per visit row. Day / file totals are ignored; we recompute. */
-function enrichVisitRow(row) {
+function canonicalTown(name, territoryRows) {
+  var want = collapseSpaces(name).toLowerCase();
+  if (!want) return "";
+  var found = (territoryRows || []).find(function (t) {
+    return collapseSpaces(t.town).toLowerCase() === want;
+  });
+  return found ? found.town : collapseSpaces(name);
+}
+
+function isoFromParts(y, m, d) {
+  return String(y) + "-" + String(m).padStart(2, "0") + "-" + String(d).padStart(2, "0");
+}
+
+function monthKeyAdd(monthKey, delta) {
+  var p = String(monthKey || "").split("-");
+  if (p.length !== 2) return "";
+  var y = Number(p[0]);
+  var m = Number(p[1]) + delta;
+  while (m < 1) { m += 12; y -= 1; }
+  while (m > 12) { m -= 12; y += 1; }
+  return isoFromParts(y, m, 1).slice(0, 7);
+}
+
+function daysInMonthKey(monthKey) {
+  var p = String(monthKey || "").split("-");
+  if (p.length !== 2) return 0;
+  return new Date(Number(p[0]), Number(p[1]), 0).getDate();
+}
+
+function lastDateISO(rows) {
+  var max = "";
+  (rows || []).forEach(function (r) {
+    if (r.dateISO && r.dateISO > max) max = r.dateISO;
+  });
+  return max;
+}
+
+function datesUpTo(monthKey, dataUpTo) {
+  var p = String(monthKey || "").split("-");
+  if (p.length !== 2 || !dataUpTo) return [];
+  var y = Number(p[0]);
+  var m = Number(p[1]);
+  var last = Number(String(dataUpTo).split("-")[2]);
+  var out = [];
+  var d;
+  for (d = 1; d <= last; d++) out.push(isoFromParts(y, m, d));
+  return out;
+}
+
+function rollingVisitContext(allVisitPacks, monthKey) {
+  var want = [monthKeyAdd(monthKey, -2), monthKeyAdd(monthKey, -1), monthKey];
+  var present = [];
+  var rows = [];
+  (allVisitPacks || []).forEach(function (pack) {
+    if (want.indexOf(pack.month) >= 0) {
+      present.push(pack.month);
+      rows = rows.concat(pack.rows || []);
+    }
+  });
+  present.sort();
+  return { rows: rows, months: present };
+}
+
+function monthRangeNote(months) {
+  if (!months || !months.length) return "No visit months in range.";
+  var names = months.map(function (k) {
+    var p = String(k).split("-");
+    var labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    return labels[Number(p[1]) - 1] || k;
+  });
+  if (months.length === 1) {
+    return "Based on " + names[0] + " only – upload more months for a fuller view";
+  }
+  return "Based on " + names[0] + "–" + names[names.length - 1];
+}
+
+function paceFrom(achieved, expected) {
+  if (expected == null || Number.isNaN(expected)) {
+    return { pace: null, paceLabel: "—", paceClass: "" };
+  }
+  var diff = achieved - expected;
+  if (diff >= 0) return { pace: diff, paceLabel: "On track (" + (diff > 0 ? "+" : "") + diff + ")", paceClass: "ach-green" };
+  if (diff >= -2) return { pace: diff, paceLabel: "Slightly behind (" + diff + ")", paceClass: "ach-amber" };
+  return { pace: diff, paceLabel: "Behind (" + diff + ")", paceClass: "ach-red" };
+}
+
+/* Section 4.1 – per row. File time totals are ignored; we recompute. */
+function enrichVisitRow(row, territoryRows) {
   var visit = isVisitRow(row);
-  var trip = visit ? hoursBetween(row.tripStartMin, row.tripEndMin) : null;
-  var prod = visit ? hoursBetween(row.prodStartMin, row.prodEndMin) : null;
-  var travel = trip != null && prod != null ? round2(trip - prod) : null;
-  var planned = collapseSpaces(row.plannedTown);
-  var actual = collapseSpaces(row.trackerPresence);
+  var trip = hoursBetween(row.tripStartMin, row.tripEndMin);
+  var prod = hoursBetween(row.prodStartMin, row.prodEndMin);
+  var travel = null;
+  if (trip != null && prod != null) travel = round2(trip - prod);
+  else if (trip != null) travel = trip;
+  var planned = canonicalTown(row.plannedTown, territoryRows);
+  var actual = canonicalTown(row.trackerPresence, territoryRows);
   var planMatch = visit && planned && actual && planned.toLowerCase() === actual.toLowerCase();
   return Object.assign({}, row, {
     isVisit: visit,
     visitedTown: visit ? actual : "",
+    plannedTownDisplay: planned,
+    trackerTownDisplay: actual,
     tripHours: trip,
     prodHours: prod,
     travelHours: travel,
@@ -177,83 +268,147 @@ function uniqueSorted(list) {
   return out;
 }
 
-function dayTypeFromHours(prodHours, isFieldDay) {
-  if (!isFieldDay) return "";
+function dayTypeFromHours(prodHours) {
   if (prodHours >= 3) return "Green";
   if (prodHours >= 2) return "Red";
   return "Invalid";
 }
 
-function nonVisitDayLabel(statuses) {
-  var keys = statuses.map(statusKey);
+/* Section 4.2 priority when there is no Market Visit that day. */
+function nonVisitDayLabel(rows) {
+  var keys = (rows || []).map(function (r) { return statusKey(r.status); });
   if (keys.indexOf(STATUS_LEAVE) >= 0) return "Leave";
+  if (keys.indexOf(STATUS_HOLIDAY) >= 0) return "Holiday";
   if (keys.indexOf(STATUS_MEETING) >= 0) return "Meeting";
-  if (keys.indexOf(STATUS_OFFICE) >= 0) return "Officework";
+  if (keys.indexOf(STATUS_OFFICE) >= 0) return "Office Work";
   if (keys.indexOf(STATUS_TRANSIT) >= 0) return "Transit";
-  return statuses[0] || "";
+  return collapseSpaces((rows[0] && rows[0].status) || "") || "No entry";
 }
 
-/* Section 4.2 – one object per RM per calendar day. */
-function buildDayRecords(visitRows, rmInfo) {
+function minMins(rows, field) {
+  var vals = rows.map(function (r) { return r[field]; }).filter(function (v) {
+    return v != null && v !== "" && !Number.isNaN(Number(v));
+  });
+  if (!vals.length) return null;
+  return Math.min.apply(null, vals.map(Number));
+}
+
+function maxMins(rows, field) {
+  var vals = rows.map(function (r) { return r[field]; }).filter(function (v) {
+    return v != null && v !== "" && !Number.isNaN(Number(v));
+  });
+  if (!vals.length) return null;
+  return Math.max.apply(null, vals.map(Number));
+}
+
+function emptyDayRecord(rmName, dateISO) {
+  var d = parseISODate(dateISO);
+  return {
+    rmName: rmName,
+    dateISO: dateISO,
+    dayName: d ? weekdayShort(d) : "",
+    status: "No entry",
+    statuses: "",
+    towns: "",
+    townList: [],
+    visitCount: 0,
+    tripStartLabel: "",
+    tripEndLabel: "",
+    prodStartLabel: "",
+    prodEndLabel: "",
+    dailyProdHours: null,
+    dailyTripHours: null,
+    dailyTravelHours: null,
+    isFieldDay: false,
+    isValidVisitDay: false,
+    dayType: "No entry",
+    isGreen: false,
+    isRed: false,
+    isInvalid: false,
+    isLeave: false,
+    isHoliday: false,
+    isMeeting: false,
+    isOfficework: false,
+    isTransit: false,
+    isMissing: true,
+    baseTownDay: false,
+    otherTtyDay: false,
+    planDeviationText: "",
+    remarks: "",
+    rows: []
+  };
+}
+
+/* Section 4.2 – exactly one label per RM per date. */
+function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
+  if (!rawRows || !rawRows.length) return emptyDayRecord(rmName, dateISO);
+  var rows = rawRows.map(function (r) { return enrichVisitRow(r, territoryRows); });
+  var visits = rows.filter(function (r) { return r.isVisit; });
+  var isFieldDay = visits.length > 0;
+  var towns = uniqueSorted(visits.map(function (r) { return r.visitedTown; }));
+  var dailyProd = round2(visits.reduce(function (sum, r) { return sum + (r.prodHours || 0); }, 0));
+  var dailyTrip = round2(rows.reduce(function (sum, r) { return sum + (r.tripHours || 0); }, 0));
+  var dailyTravel = round2(rows.reduce(function (sum, r) { return sum + (r.travelHours || 0); }, 0));
+  var type = isFieldDay ? dayTypeFromHours(dailyProd || 0) : nonVisitDayLabel(rows);
+  var valid = type === "Green" || type === "Red";
+  var baseCanon = canonicalTown(rmInfo && rmInfo.baseTown, territoryRows);
+  var baseTownDay = !!(valid && baseCanon && towns.length === 1 && towns[0].toLowerCase() === baseCanon.toLowerCase());
+  var otherTtyDay = valid && !baseTownDay;
+  var deviations = uniqueSorted(visits.filter(function (r) { return r.planDeviation; }).map(function (r) {
+    return r.plannedTownDisplay;
+  }));
+  var remarks = uniqueSorted(rows.map(function (r) { return collapseSpaces(r.remarks); }));
+  var timeRows = isFieldDay ? visits : rows;
+  var d = parseISODate(dateISO);
+  return {
+    rmName: rmName,
+    dateISO: dateISO,
+    dayName: d ? weekdayShort(d) : "",
+    status: type,
+    statuses: uniqueSorted(rows.map(function (r) { return collapseSpaces(r.status); })).join(", "),
+    towns: towns.join(", "),
+    townList: towns,
+    visitCount: visits.length,
+    tripStartLabel: formatMinutesAsTime(minMins(timeRows, "tripStartMin")),
+    tripEndLabel: formatMinutesAsTime(maxMins(timeRows, "tripEndMin")),
+    prodStartLabel: formatMinutesAsTime(minMins(visits, "prodStartMin")),
+    prodEndLabel: formatMinutesAsTime(maxMins(visits, "prodEndMin")),
+    dailyProdHours: isFieldDay ? dailyProd : null,
+    dailyTripHours: dailyTrip,
+    dailyTravelHours: dailyTravel,
+    isFieldDay: isFieldDay,
+    isValidVisitDay: valid,
+    dayType: type,
+    isGreen: type === "Green",
+    isRed: type === "Red",
+    isInvalid: type === "Invalid",
+    isLeave: type === "Leave",
+    isHoliday: type === "Holiday",
+    isMeeting: type === "Meeting",
+    isOfficework: type === "Office Work",
+    isTransit: type === "Transit",
+    isMissing: false,
+    baseTownDay: baseTownDay,
+    otherTtyDay: otherTtyDay,
+    planDeviationText: deviations.join(", "),
+    remarks: remarks.join("; "),
+    rows: rows
+  };
+}
+
+function buildDayRecords(visitRows, rmInfo, territoryRows, monthKey, dataUpTo) {
+  var rmName = rmInfo && rmInfo.rmName;
   var groups = {};
   (visitRows || []).forEach(function (raw) {
-    var row = enrichVisitRow(raw);
-    var rm = row.matchedRmName || row.managerName;
-    var date = row.dateISO;
-    if (!rm || !date) return;
-    var key = rm + "|" + date;
-    if (!groups[key]) {
-      groups[key] = {
-        rmName: rm,
-        dateISO: date,
-        rows: []
-      };
-    }
-    groups[key].rows.push(row);
+    var date = raw.dateISO;
+    if (!date) return;
+    if (!groups[date]) groups[date] = [];
+    groups[date].push(raw);
   });
-
-  return Object.keys(groups).sort().map(function (key) {
-    var g = groups[key];
-    var visits = g.rows.filter(function (r) { return r.isVisit; });
-    var statuses = uniqueSorted(g.rows.map(function (r) { return collapseSpaces(r.status); }));
-    var towns = uniqueSorted(visits.map(function (r) { return r.visitedTown; }));
-    var dailyProd = round2(visits.reduce(function (sum, r) { return sum + (r.prodHours || 0); }, 0));
-    var dailyTrip = round2(visits.reduce(function (sum, r) { return sum + (r.tripHours || 0); }, 0));
-    var dailyTravel = round2(visits.reduce(function (sum, r) { return sum + (r.travelHours || 0); }, 0));
-    var isFieldDay = visits.length > 0;
-    var type = isFieldDay ? dayTypeFromHours(dailyProd, true) : nonVisitDayLabel(statuses);
-    var valid = type === "Green" || type === "Red";
-    var baseTown = rmInfo && rmInfo.baseTown ? collapseSpaces(rmInfo.baseTown).toLowerCase() : "";
-    var baseTownDay = false;
-    if (valid && baseTown && towns.length === 1 && towns[0].toLowerCase() === baseTown) {
-      baseTownDay = true;
-    }
-    var d = parseISODate(g.dateISO);
-    return {
-      rmName: g.rmName,
-      dateISO: g.dateISO,
-      dayName: d ? weekdayShort(d) : "",
-      status: isFieldDay ? "Market Visit" : (statuses[0] || ""),
-      statuses: statuses.join(", "),
-      towns: towns.join(", "),
-      townList: towns,
-      visitCount: visits.length,
-      dailyProdHours: isFieldDay ? dailyProd : null,
-      dailyTripHours: isFieldDay ? dailyTrip : null,
-      dailyTravelHours: isFieldDay ? dailyTravel : null,
-      isFieldDay: isFieldDay,
-      isValidVisitDay: valid,
-      dayType: type,
-      isGreen: type === "Green",
-      isRed: type === "Red",
-      isInvalid: type === "Invalid",
-      isLeave: !isFieldDay && statusKey(type) === STATUS_LEAVE,
-      isMeeting: !isFieldDay && statusKey(type) === STATUS_MEETING,
-      isOfficework: !isFieldDay && statusKey(type) === STATUS_OFFICE,
-      isTransit: !isFieldDay && statusKey(type) === STATUS_TRANSIT,
-      baseTownDay: baseTownDay,
-      rows: g.rows
-    };
+  var dates = datesUpTo(monthKey, dataUpTo);
+  if (!dates.length) dates = Object.keys(groups).sort();
+  return dates.map(function (iso) {
+    return buildDayRecord(rmName, iso, groups[iso] || [], rmInfo, territoryRows);
   });
 }
 
@@ -273,7 +428,8 @@ function countTrue(days, prop) {
 }
 
 /* Section 4.3 – one summary object per RM for the month. */
-function summarizeRmMonth(rmMasterRow, visitRows, territoryRows) {
+function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
+  opts = opts || {};
   var rmName = rmMasterRow.rmName;
   var region = rmMasterRow.region;
   var zone = "";
@@ -284,15 +440,22 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows) {
     }
     return false;
   });
-  var days = buildDayRecords(visitRows, rmMasterRow);
-  var enriched = (visitRows || []).map(enrichVisitRow);
+  var monthKey = opts.monthKey || "";
+  var dataUpTo = opts.dataUpTo || lastDateISO(visitRows);
+  var days = buildDayRecords(visitRows, rmMasterRow, territoryRows, monthKey, dataUpTo);
+  var enriched = (visitRows || []).map(function (r) { return enrichVisitRow(r, territoryRows); });
   var visits = enriched.filter(function (r) { return r.isVisit; });
 
   var target = Number(rmMasterRow.targetVisits) || 0;
   var leaveDays = countTrue(days, "isLeave");
+  var holidayDays = countTrue(days, "isHoliday");
   var adjustedTarget = target - leaveDays;
-  var achieved = countTrue(days, "isValidVisitDay");
+  var achieved = countTrue(days, "isGreen") + countTrue(days, "isRed");
   var achievementPct = adjustedTarget > 0 ? pct(achieved, adjustedTarget) : null;
+  var dim = daysInMonthKey(monthKey);
+  var dayNum = dataUpTo ? Number(String(dataUpTo).split("-")[2]) : 0;
+  var expectedByNow = (dim && adjustedTarget != null) ? Math.round(adjustedTarget * (dayNum / dim)) : null;
+  var pace = paceFrom(achieved, expectedByNow);
 
   var uniqueTowns = uniqueSorted(visits.map(function (r) { return r.visitedTown; }));
   var fieldDays = countTrue(days, "isFieldDay");
@@ -300,62 +463,68 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows) {
   var redDays = countTrue(days, "isRed");
   var invalidDays = countTrue(days, "isInvalid");
   var baseTownDays = countTrue(days, "baseTownDay");
+  var otherTtyDays = countTrue(days, "otherTtyDay");
+  var missingDays = countTrue(days, "isMissing");
 
   var planMatchCount = visits.filter(function (r) { return r.planMatch; }).length;
   var planAdherence = visits.length ? pct(planMatchCount, visits.length) : null;
   var planDeviation = planAdherence == null ? null : round2(100 - planAdherence);
 
-  var totalTrip = round2(visits.reduce(function (s, r) { return s + (r.tripHours || 0); }, 0));
-  var totalProd = round2(visits.reduce(function (s, r) { return s + (r.prodHours || 0); }, 0));
-  var totalTravel = round2(visits.reduce(function (s, r) { return s + (r.travelHours || 0); }, 0));
+  var totalTrip = round2(days.reduce(function (s, d) { return s + (d.dailyTripHours || 0); }, 0));
+  var totalProd = round2(days.reduce(function (s, d) { return s + (d.dailyProdHours || 0); }, 0));
+  var totalTravel = round2(days.reduce(function (s, d) { return s + (d.dailyTravelHours || 0); }, 0));
   var avgTrip = fieldDays ? round2(totalTrip / fieldDays) : null;
   var avgProd = fieldDays ? round2(totalProd / fieldDays) : null;
   var avgTravel = fieldDays ? round2(totalTravel / fieldDays) : null;
 
   var regionTowns = townsInRegion(territoryRows, region);
   var regionTownNames = uniqueSorted(regionTowns.map(function (t) { return t.town; }));
-  var visitedSet = {};
-  uniqueTowns.forEach(function (t) { visitedSet[t.toLowerCase()] = true; });
-
-  var townsVisitedInRegion = regionTownNames.filter(function (t) {
-    return visitedSet[t.toLowerCase()];
+  var rolling = opts.rollingRows || visitRows || [];
+  var visited3m = {};
+  rolling.forEach(function (raw) {
+    var row = enrichVisitRow(raw, territoryRows);
+    if (!row.isVisit || !row.visitedTown) return;
+    if (!namesLikelySame(row.matchedRmName || row.managerName, rmName)) return;
+    visited3m[row.visitedTown.toLowerCase()] = row.visitedTown;
   });
   var townsNotVisited = regionTownNames.filter(function (t) {
-    return !visitedSet[t.toLowerCase()];
+    return !visited3m[t.toLowerCase()];
   });
+  var townsVisitedInRegion = regionTownNames.filter(function (t) {
+    return !!visited3m[t.toLowerCase()];
+  });
+  var byTerritory = {};
+  townsNotVisited.forEach(function (town) {
+    var rec = regionTowns.find(function (t) {
+      return collapseSpaces(t.town).toLowerCase() === town.toLowerCase();
+    });
+    var ter = rec ? rec.territory : "Other";
+    if (!byTerritory[ter]) byTerritory[ter] = [];
+    byTerritory[ter].push(town);
+  });
+  var townsNotVisitedGrouped = Object.keys(byTerritory).sort().map(function (ter) {
+    return ter + ": " + byTerritory[ter].join(", ");
+  }).join(" · ");
 
   var territories = uniqueSorted(regionTowns.map(function (t) { return t.territory; }));
   var territoriesNotVisited = territories.filter(function (ter) {
     var towns = regionTowns.filter(function (t) {
       return collapseSpaces(t.territory).toLowerCase() === collapseSpaces(ter).toLowerCase();
     });
-    return !towns.some(function (t) { return visitedSet[collapseSpaces(t.town).toLowerCase()]; });
+    return !towns.some(function (t) { return visited3m[collapseSpaces(t.town).toLowerCase()]; });
   });
 
-  var visitsPerTown = {};
-  var visitsPerTerritory = {};
-  visits.forEach(function (r) {
-    var town = collapseSpaces(r.visitedTown);
-    if (town) visitsPerTown[town] = (visitsPerTown[town] || 0) + 1;
-    var rec = regionTowns.find(function (t) {
-      return collapseSpaces(t.town).toLowerCase() === town.toLowerCase();
-    });
-    var ter = rec ? rec.territory : collapseSpaces(r.territory);
-    if (ter) visitsPerTerritory[ter] = (visitsPerTerritory[ter] || 0) + 1;
-  });
-
-  function dictText(obj) {
-    return Object.keys(obj).sort().map(function (k) { return k + ": " + obj[k]; }).join(", ");
-  }
-
-  return {
+  return Object.assign({
     rmName: rmName,
     region: region,
     zone: zone,
-    baseTown: rmMasterRow.baseTown,
+    baseTown: canonicalTown(rmMasterRow.baseTown, territoryRows) || rmMasterRow.baseTown,
     target: target,
     leaveDays: leaveDays,
+    holidayDays: holidayDays,
     adjustedTarget: adjustedTarget,
+    dataUpTo: dataUpTo,
+    expectedByNow: expectedByNow,
     achieved: achieved,
     achievementPct: achievementPct,
     achievementPctLabel: formatPct(achievementPct),
@@ -368,9 +537,11 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows) {
     redDays: redDays,
     invalidDays: invalidDays,
     baseTownDays: baseTownDays,
+    otherTtyDays: otherTtyDays,
     meetingDays: countTrue(days, "isMeeting"),
     officeworkDays: countTrue(days, "isOfficework"),
     transitDays: countTrue(days, "isTransit"),
+    missingDays: missingDays,
     planMatchCount: planMatchCount,
     planAdherencePct: planAdherence,
     planAdherenceLabel: formatPct(planAdherence),
@@ -386,26 +557,36 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows) {
     territoriesNotVisitedList: territoriesNotVisited.join(", "),
     townsNotVisited: townsNotVisited.length,
     townsNotVisitedList: townsNotVisited.join(", "),
+    townsNotVisitedGrouped: townsNotVisitedGrouped,
+    townsNotVisitedNote: monthRangeNote(opts.rollingMonths || []),
     regionTownCount: regionTownNames.length,
     townsVisitedInRegionCount: townsVisitedInRegion.length,
     coveragePct: regionTownNames.length ? pct(townsVisitedInRegion.length, regionTownNames.length) : null,
     coverageLabel: regionTownNames.length ? formatPct(pct(townsVisitedInRegion.length, regionTownNames.length)) : "—",
-    visitsPerTerritory: dictText(visitsPerTerritory),
-    visitsPerTown: dictText(visitsPerTown),
     days: days
-  };
+  }, pace);
 }
 
-function summarizeMonth(monthKey, visitRows, rmPacks, territoryRows) {
+function summarizeMonth(monthKey, visitRows, rmPacks, territoryRows, allVisitPacks) {
   var wantMonth = monthNumberFromKey(monthKey);
-  var pack = (rmPacks || []).find(function (p) { return String(p.month) === wantMonth; });
+  var pack = (rmPacks || []).find(function (p) {
+    return String(p.month) === wantMonth || String(p.month) === String(monthKey);
+  });
   var rms = pack ? pack.rows.slice() : [];
+  var dataUpTo = lastDateISO(visitRows);
+  var rolling = rollingVisitContext(allVisitPacks || [], monthKey);
+  var opts = {
+    monthKey: monthKey,
+    dataUpTo: dataUpTo,
+    rollingRows: rolling.rows,
+    rollingMonths: rolling.months
+  };
   var summaries = rms.map(function (rm) {
     var rows = (visitRows || []).filter(function (v) {
       var name = v.matchedRmName || v.managerName;
       return namesLikelySame(name, rm.rmName);
     });
-    return summarizeRmMonth(rm, rows, territoryRows || []);
+    return summarizeRmMonth(rm, rows, territoryRows || [], opts);
   });
 
   var unmatched = uniqueSorted((visitRows || []).filter(function (v) {
@@ -417,7 +598,7 @@ function summarizeMonth(monthKey, visitRows, rmPacks, territoryRows) {
     var rows = visitRows.filter(function (v) {
       return !v.matchedRmName && namesLikelySame(v.managerName, name);
     });
-    var s = summarizeRmMonth(fake, rows, territoryRows || []);
+    var s = summarizeRmMonth(fake, rows, territoryRows || [], opts);
     s.unmatched = true;
     summaries.push(s);
   });

@@ -65,58 +65,74 @@
       </div>
 
       <div id="dash-body">
-        <div class="kpi-grid" id="kpi-grid"></div>
+        <article class="card" data-copy-title="KPIs">
+          <div class="card-head">
+            <h2>KPIs</h2>
+          </div>
+          <div class="kpi-grid" id="kpi-grid"></div>
+        </article>
 
         <div class="alert-grid" id="alert-grid"></div>
 
         <div class="chart-grid">
-          <article class="card chart-card">
+          <article class="card chart-card" data-copy-title="Achieved vs adjusted target">
             <h2>Achieved vs adjusted target</h2>
+            <p class="muted tiny">Achieved bars coloured by pace. Diamonds = expected by now.</p>
             <div class="chart-box chart-box-tall"><canvas id="chart-achieve"></canvas></div>
           </article>
-          <article class="card chart-card">
-            <h2>Daily valid visit days</h2>
-            <div class="chart-box"><canvas id="chart-trend"></canvas></div>
-          </article>
-          <article class="card chart-card">
-            <h2>Productive vs travel hours</h2>
-            <div class="chart-box chart-box-tall"><canvas id="chart-time"></canvas></div>
-          </article>
-          <article class="card chart-card">
-            <h2>Day type mix</h2>
-            <div class="chart-box chart-box-tall"><canvas id="chart-mix"></canvas></div>
-          </article>
-          <article class="card chart-card">
-            <h2>Town coverage by region</h2>
-            <div class="chart-box"><canvas id="chart-coverage"></canvas></div>
-          </article>
-          <article class="card chart-card">
+          <article class="card chart-card" data-copy-title="Plan adherence by RM">
             <h2>Plan adherence by RM</h2>
             <div class="chart-box chart-box-tall"><canvas id="chart-plan"></canvas></div>
           </article>
+          <article class="card chart-card chart-card-wide" data-copy-title="RM × date grid">
+            <h2>RM × date</h2>
+            <p class="muted tiny">Hover a cell for towns and productive hours. Future dates are blank.</p>
+            <div id="date-grid"></div>
+          </article>
+          <article class="card chart-card" data-copy-title="Base Town vs Other TTY">
+            <h2>Base town vs other TTY</h2>
+            <div class="chart-box chart-box-tall"><canvas id="chart-tty"></canvas></div>
+          </article>
+          <article class="card chart-card" data-copy-title="Average productive hours">
+            <h2>Avg productive hrs per visit day</h2>
+            <p class="muted tiny">Dashed lines at 2 hrs (SOP) and 3 hrs (green).</p>
+            <div class="chart-box chart-box-tall"><canvas id="chart-avgprod"></canvas></div>
+          </article>
+          <article class="card chart-card" id="card-trend3" data-copy-title="3-month achievement trend" hidden>
+            <h2>3-month achievement %</h2>
+            <div class="chart-box"><canvas id="chart-trend3"></canvas></div>
+          </article>
         </div>
 
-        <article class="card">
+        <div class="rm-cards-section">
+          <div class="card-head">
+            <h2>RM cards</h2>
+            <p class="muted">WhatsApp-style snapshot per RM.</p>
+          </div>
+          <div class="rm-card-grid" id="rm-card-grid"></div>
+        </div>
+
+        <article class="card" data-copy-title="RM ranking">
           <div class="card-head">
             <div>
               <h2>RM ranking</h2>
-              <p class="muted">Click a column to sort. Click a row to open that RM’s day detail.</p>
+              <p class="muted" id="summary-meta">Click a column to sort. Click a row to open that RM’s day detail.</p>
             </div>
           </div>
-          <div class="table-wrap" id="table-ranking"></div>
+          <div class="table-wrap table-wrap-fit" id="table-ranking"></div>
         </article>
 
-        <article class="card">
+        <article class="card" id="card-compare" data-copy-title="Month comparison">
           <div class="card-head">
             <div>
-              <h2>RM Summary</h2>
-              <p class="muted" id="summary-meta">Full KPI list for the current filters.</p>
+              <h2>Month comparison</h2>
+              <p class="muted" id="compare-meta">Last uploaded months side by side.</p>
             </div>
           </div>
-          <div class="table-wrap table-wrap-wide" id="table-summary"></div>
+          <div id="table-compare"></div>
         </article>
 
-        <article class="card" id="card-days">
+        <article class="card" id="card-days" data-copy-title="Day Detail">
           <div class="card-head">
             <div>
               <h2>Day Detail</h2>
@@ -124,7 +140,7 @@
             </div>
             <select id="dash-rm" class="select"></select>
           </div>
-          <div class="table-wrap table-wrap-wide" id="table-days"></div>
+          <div class="table-wrap table-wrap-fit" id="table-days"></div>
         </article>
       </div>
     </section>
@@ -151,7 +167,7 @@
         <article class="card upload-card" data-upload="rm">
           <h2>RM master</h2>
           <p class="muted">Upload each month. Saving replaces that month’s RM list only.</p>
-          <p class="cols">Columns: <code>Month</code> · <code>Region</code> · <code>RM Name</code> · <code>Base Town</code> · <code>Target Visits</code></p>
+          <p class="cols">Columns: <code>Month</code> · <code>Region</code> · <code>RM Name</code> · <code>Base Town</code> · <code>Target</code></p>
           <label class="dropzone">
             <input type="file" id="file-rm" accept=".xlsx,.xls" />
             <span class="dropzone-title">Choose Excel file</span>
@@ -239,6 +255,7 @@
 
   <script src="libs/xlsx.full.min.js"></script>
   <script src="libs/chart.umd.min.js"></script>
+  <script src="libs/html2canvas.min.js"></script>
   <script src="js/db.js"></script>
   <script src="js/calculations.js"></script>
   <script src="js/app.js"></script>

@@ -155,7 +155,7 @@ function drawRmTable() {
       { key: "region", label: "Region" },
       { key: "rmName", label: "RM Name" },
       { key: "baseTown", label: "Base Town" },
-      { key: "targetVisits", label: "Target Visits" }
+      { key: "targetVisits", label: "Target" }
     ],
     rows,
     "No matching rows."

@@ -133,7 +133,7 @@ const RM_COLS = [
   { key: "region", label: "Region" },
   { key: "rmName", label: "RM Name" },
   { key: "baseTown", label: "Base Town" },
-  { key: "targetVisits", label: "Target Visits" }
+  { key: "targetVisits", label: "Target" }
 ];
 
 let pendingTerritory = [];
@@ -389,7 +389,7 @@ function parseVisitSheet(matrix, rmRows, lookup) {
     const matched = matchRmName(managerName, rmRows);
     const st = statusKey(status);
     const visit = st === STATUS_VISIT;
-    const allowed = [STATUS_VISIT, STATUS_LEAVE, STATUS_MEETING, STATUS_OFFICE, STATUS_TRANSIT];
+    const allowed = [STATUS_VISIT, STATUS_LEAVE, STATUS_HOLIDAY, STATUS_MEETING, STATUS_OFFICE, STATUS_TRANSIT];
     const errors = {};
 
     if (!region) errors.region = "Missing region";
