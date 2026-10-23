@@ -62,14 +62,16 @@ function parseRmMaster(rawRows, lookup) {
     if (!month) errors.month = "Missing month";
     if (!region) errors.region = "Missing region";
     if (!rmName) errors.rmName = "Missing RM name";
-    if (!baseTown) errors.baseTown = "Missing base town";
+    const baseParts = String(baseTown || "").split(",").map((p) => p.trim()).filter(Boolean);
+    if (!baseParts.length) errors.baseTown = "Missing base town";
     const targetVisits = Number(targetRaw);
     if (targetRaw === "" || Number.isNaN(targetVisits) || targetVisits < 0) {
       errors.targetVisits = "Target must be a number";
     }
     if (lookup.regions.size) {
       if (region && !lookup.regions.has(norm(region))) errors.region = "Unknown region";
-      if (baseTown && !lookup.towns.has(norm(baseTown))) errors.baseTown = "Unknown town";
+      const unknownBase = baseParts.filter((t) => !lookup.towns.has(norm(t)));
+      if (unknownBase.length) errors.baseTown = "Unknown town: " + unknownBase.join(", ");
     }
     return {
       month,

@@ -26,8 +26,9 @@ const DAY_COLS = [
   { key: "dailyTravelHours", label: "Travel hrs", num: true },
   { key: "dailyTotalHours", label: "Total hrs", num: true },
   { key: "dailyKms", label: "KMs", num: true },
-  { key: "dayType", label: "Day type" },
-  { key: "baseTownDayLabel", label: "Base town" },
+  { key: "townCount", label: "Counted towns", num: true },
+  { key: "dayTypeLabel", label: "Day type" },
+  { key: "baseTownKind", label: "Base town" },
   { key: "planDeviationText", label: "Plan deviation" },
   { key: "remarks", label: "Remarks" }
 ];
@@ -40,18 +41,20 @@ const RANK_COLS = [
   { key: "achieved", label: "Achieved" },
   { key: "achievementPct", label: "Ach %" },
   { key: "pace", label: "Pace" },
-  { key: "greenDays", label: "Green" },
-  { key: "redDays", label: "Red" },
+  { key: "validDays", label: "Valid" },
   { key: "invalidDays", label: "Invalid" },
-  { key: "baseTownDays", label: "Base town" },
+  { key: "baseOnlyNotCounted", label: "Base-only (counted/over)" },
   { key: "otherTtyDays", label: "Other TTY" },
   { key: "leaveDays", label: "Leave" },
   { key: "holidayDays", label: "Holiday" },
   { key: "meetingDays", label: "Meeting" },
   { key: "officeworkDays", label: "Office Work" },
   { key: "missingDays", label: "Missing" },
-  { key: "townsNotVisited", label: "Towns not vis. (3M)" },
+  { key: "territoriesNotVisited", label: "Terr. not vis." },
+  { key: "townsNotVisited", label: "Towns not vis. (6M)" },
+  { key: "townsRepeated", label: "Towns repeated" },
   { key: "planAdherencePct", label: "Plan %" },
+  { key: "avgProdHours", label: "Avg prod hrs", num: true },
   { key: "totalKms", label: "Total KMs", num: true },
   { key: "avgKmsPerVisitDay", label: "Avg KMs / day", num: true }
 ];
@@ -100,8 +103,7 @@ function paceColor(row) {
 }
 
 const DAY_CELL = {
-  Green: { bg: "#34d399", label: "Green" },
-  Red: { bg: "#fbbf24", label: "Red" },
+  Valid: { bg: "#34d399", label: "Valid" },
   Invalid: { bg: "#f87171", label: "Invalid" },
   Leave: { bg: "#94a3b8", label: "Leave" },
   Holiday: { bg: "#64748b", label: "Holiday" },
@@ -114,8 +116,7 @@ const DAY_CELL = {
 };
 
 function dayTypeClass(type) {
-  if (type === "Green") return "type-green";
-  if (type === "Red") return "type-red";
+  if (type === "Valid") return "type-green";
   if (type === "Invalid") return "type-invalid";
   if (type === "No entry" || type === "Missing") return "type-missing";
   return "";
@@ -284,33 +285,33 @@ function drawKpis(rows) {
   const achieved = sum(rows, "achieved");
   const adj = sum(rows, "adjustedTarget");
   const pctVal = adj > 0 ? round2((achieved / adj) * 100) : null;
-  const green = sum(rows, "greenDays");
-  const red = sum(rows, "redDays");
-  const valid = sum(rows, "validVisitDays");
+  const valid = sum(rows, "validDays");
   const visits = sum(rows, "totalVisits");
   const planOk = sum(rows, "planMatchCount");
   const planPct = visits ? round2((planOk / visits) * 100) : null;
 
   const townMiss = sum(rows, "townsNotVisited");
   const townTotal = sum(rows, "regionTownCount");
+  const terrMiss = sum(rows, "territoriesNotVisited");
+  const terrTotal = sum(rows, "territoryCount");
 
   const expected = sum(rows, "expectedByNow");
   const paceInfo = rows.length === 1 ? rows[0] : paceFrom(achieved, expected);
-  const townNote = rows.length === 1 ? (rows[0].townsNotVisitedNote || "") : "Rolling 3 months, by region";
+  const townNote = rows.length === 1 ? (rows[0].townsNotVisitedNote || "") : "Last " + SOP.townCoverageMonths + " months, counted towns only";
   const barCls = achievementClass(pctVal);
   const items = [
     kpiHtml("Achieved vs adj. target", (achieved + " / " + adj), formatPct(pctVal) + " · exp. " + expected, barCls, pctVal),
-    kpiHtml("Valid visit days", String(valid), green + " green · " + red + " red"),
-    kpiHtml("Invalid days", String(sum(rows, "invalidDays")), "Incomplete visit < 2 hrs", "kpi-bad"),
-    kpiHtml("Total visits", String(visits), "Town visit rows"),
-    kpiHtml("Base town days", String(sum(rows, "baseTownDays")), "Only base town that day"),
-    kpiHtml("Other TTY days", String(sum(rows, "otherTtyDays")), "Valid days outside base town"),
-    kpiHtml("Leave days", String(sum(rows, "leaveDays")), "Reduce adjusted target"),
+    kpiHtml("Valid days", String(valid), "≥ " + SOP.minDayHrs + " hrs and a town ≥ " + SOP.minTownHrs + " hrs"),
+    kpiHtml("Invalid days", String(sum(rows, "invalidDays")), "Under " + SOP.minDayHrs + " hrs and/or no town ≥ " + SOP.minTownHrs, "kpi-bad"),
+    kpiHtml("Total visits", String(visits), "Counted towns across days"),
+    kpiHtml("Other TTY days", String(sum(rows, "otherTtyDays")), "Valid days with a non-base counted town"),
+    kpiHtml("Base-only counted", String(sum(rows, "baseOnlyCounted")), "Cap " + SOP.maxBaseOnlyDays + " toward target"),
+    kpiHtml("Base-only not counted", String(sum(rows, "baseOnlyNotCounted")), "Base-only days over the cap of " + SOP.maxBaseOnlyDays),
+    kpiHtml("Leave days", String(sum(rows, "leaveDays")), "SOP allows " + SOP.plannedLeaves + "; extra leaves reduce target"),
     kpiHtml("Holiday days", String(sum(rows, "holidayDays")), "Weekly off · do not reduce target"),
-    kpiHtml("Meeting days", String(sum(rows, "meetingDays")), "Do not reduce target"),
     kpiHtml("Pace", rows.length === 1 ? paceInfo.paceLabel : (paceInfo.paceLabel || "—"), "Achieved − expected by now", paceInfo.paceClass),
-    kpiHtml("Plan adherence", formatPct(planPct), planOk + " of " + visits + " visits matched"),
-    kpiHtml("Towns not visited (3M)", String(townMiss), (townMiss + " of " + townTotal + " towns") + (townNote ? " · " + townNote : ""))
+    kpiHtml("Territories not visited", String(terrMiss), terrMiss + " of " + terrTotal + " this month"),
+    kpiHtml("Towns not visited (6M)", String(townMiss), (townMiss + " of " + townTotal + " towns") + (townNote ? " · " + townNote : ""))
   ];
   document.getElementById("kpi-grid").innerHTML = items.join("");
 }
@@ -356,16 +357,42 @@ function drawAlerts(rows, pack) {
         towns: d.towns || "—",
         prod: formatHours(d.dailyProdHours),
         travel: formatHours(d.dailyTravelHours),
+        reason: d.invalidReason || "",
         remarks: d.remarks || ""
       });
     });
   });
 
+  const overBase = [];
+  rows.filter((s) => !s.unmatched && s.baseOnlyNotCounted > 0).forEach((s) => {
+    const extra = (s.days || []).filter((d) => d.baseOnlyDay).sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+    const notCounted = extra.slice(SOP.maxBaseOnlyDays);
+    overBase.push({
+      rmName: s.rmName,
+      count: s.baseOnlyNotCounted,
+      dates: notCounted.map((d) => formatDisplayDate(d.dateISO)).join(", ")
+    });
+  });
+
+  const terrMiss = rows.filter((s) => !s.unmatched && s.territoriesNotVisited > 0).map((s) => ({
+    rmName: s.rmName,
+    list: s.territoriesNotVisitedList || "—"
+  }));
+
+  const overSop = rows.filter((s) => !s.unmatched && (s.meetingsOverSop || s.officeOverSop || s.leavesOverSop)).map((s) => {
+    const bits = [];
+    if (s.meetingsOverSop) bits.push("Meetings " + s.meetingsSopLabel);
+    if (s.officeOverSop) bits.push("Office Work " + s.officeSopLabel);
+    if (s.leavesOverSop) bits.push("Leaves " + s.leavesSopLabel);
+    return { rmName: s.rmName, bits: bits.join(" · ") };
+  });
+
   const townSet = {};
   (dashCache.territory || []).forEach((t) => { townSet[norm(t.town)] = true; });
-  const baseBad = rows.filter((s) => {
-    if (s.unmatched || !s.baseTown) return false;
-    return !townSet[norm(s.baseTown)];
+  const baseBad = [];
+  rows.filter((s) => !s.unmatched).forEach((s) => {
+    const unknown = (s.baseTowns || splitTownList(s.baseTown)).filter((t) => t && !townSet[norm(t)]);
+    if (unknown.length) baseBad.push({ rmName: s.rmName, baseTown: unknown.join(", ") });
   });
 
   document.getElementById("alert-grid").innerHTML =
@@ -374,8 +401,14 @@ function drawAlerts(rows, pack) {
     alertCard("Invalid days", invalid.length,
       invalid.length ? invalid.map((m) => {
         const sub = formatDisplayDate(m.dateISO) + " · " + m.towns + " · " + m.prod + " hrs productive · " + m.travel + " hrs travel";
-        return alertLine(m.rmName, sub, m.remarks, m.rmName);
+        return alertLine(m.rmName, sub, [m.reason, m.remarks].filter(Boolean).join("\n"), m.rmName);
       }).join("") : '<p class="empty">None in this view.</p>') +
+    alertCard("Base-only days over " + SOP.maxBaseOnlyDays, overBase.length,
+      overBase.length ? overBase.map((m) => alertLine(m.rmName, m.count + " not counted · " + m.dates, "", m.rmName)).join("") : '<p class="empty">None in this view.</p>') +
+    alertCard("Territories not visited this month", terrMiss.length,
+      terrMiss.length ? terrMiss.map((m) => alertLine(m.rmName, m.list, "", m.rmName)).join("") : '<p class="empty">None in this view.</p>') +
+    alertCard("Over SOP", overSop.length,
+      overSop.length ? overSop.map((m) => alertLine(m.rmName, m.bits, "", m.rmName)).join("") : '<p class="empty">None in this view.</p>') +
     alertCard("Base town mismatch", baseBad.length,
       baseBad.length ? baseBad.map((s) => alertLine(s.rmName, s.baseTown || "—", "", s.rmName)).join("") : '<p class="empty">None in this view.</p>');
 
@@ -393,10 +426,12 @@ function alertCard(title, count, body) {
 }
 
 function alertLine(title, sub, remarks, rm) {
+  const extra = String(remarks || "").split("\n").filter(Boolean);
   return '<button type="button" class="alert-line" data-rm="' + escapeHtml(rm) + '">' +
     '<span class="alert-title">' + escapeHtml(title) + "</span>" +
     '<span class="alert-sub">' + escapeHtml(sub) + "</span>" +
-    (remarks ? '<span class="alert-remarks">' + escapeHtml(remarks) + "</span>" : "") +
+    extra.map((line, i) => '<span class="' + (i === 0 && !line.match(/^\s*$/) ? "alert-reason" : "alert-remarks") + '">' +
+      escapeHtml(line) + "</span>").join("") +
     "</button>";
 }
 
@@ -438,15 +473,16 @@ function rmClickPlugin() {
   };
 }
 
-function refHourLines() {
+function refHourLines(marks) {
+  const lines = marks || [[SOP.minDayHrs, COLOR.green, SOP.minDayHrs + "h"]];
   return {
-    id: "refHourLines",
+    id: "refHourLines-" + lines.map((m) => m[0]).join("-"),
     afterDatasetsDraw: function (chart) {
       const xScale = chart.scales.x;
       const area = chart.chartArea;
       if (!xScale || !area) return;
       const ctx = chart.ctx;
-      [[2, COLOR.amber, "2h"], [3, COLOR.green, "3h"]].forEach(function (item) {
+      lines.forEach(function (item) {
         const x = xScale.getPixelForValue(item[0]);
         ctx.save();
         ctx.strokeStyle = item[1];
@@ -537,7 +573,8 @@ function drawCharts(rows, pack) {
     data: {
       labels: names,
       datasets: [
-        { label: "Base town", data: ranked.map((s) => s.baseTownDays || 0), backgroundColor: COLOR.accent, borderRadius: 3 },
+        { label: "Base-only counted", data: ranked.map((s) => s.baseOnlyCounted || 0), backgroundColor: COLOR.accent, borderRadius: 3 },
+        { label: "Base-only not counted", data: ranked.map((s) => s.baseOnlyNotCounted || 0), backgroundColor: COLOR.red, borderRadius: 3 },
         { label: "Other TTY", data: ranked.map((s) => s.otherTtyDays || 0), backgroundColor: COLOR.blue, borderRadius: 3 }
       ]
     },
@@ -548,7 +585,8 @@ function drawCharts(rows, pack) {
         x: { stacked: true, beginAtZero: true, grid: { color: COLOR.grid }, ticks: { color: COLOR.text } },
         y: { stacked: true, grid: { display: false }, ticks: { color: COLOR.text } }
       }
-    }), rmClickPlugin())
+    }), rmClickPlugin()),
+    plugins: [refHourLines([[SOP.maxBaseOnlyDays, COLOR.amber, SOP.maxBaseOnlyDays + ""]])]
   });
 
   upsertChart("chart-avgprod", {
@@ -566,11 +604,11 @@ function drawCharts(rows, pack) {
       indexAxis: "y",
       plugins: { legend: { display: false } },
       scales: {
-        x: { beginAtZero: true, suggestedMax: 4, grid: { color: COLOR.grid }, ticks: { color: COLOR.text } },
+        x: { beginAtZero: true, suggestedMax: 8, grid: { color: COLOR.grid }, ticks: { color: COLOR.text } },
         y: { grid: { display: false }, ticks: { color: COLOR.text } }
       }
     }), rmClickPlugin()),
-    plugins: [refHourLines()]
+    plugins: [refHourLines([[SOP.minDayHrs, COLOR.green, SOP.minDayHrs + "h"]])]
   });
 
   drawTrend3(ranked);
@@ -640,7 +678,7 @@ function drawDateGrid(rows, pack) {
     }).join("");
     return '<tr><th class="rm-name">' + escapeHtml(s.rmName) + "</th>" + cells + "</tr>";
   }).join("");
-  const legend = ["Green","Red","Invalid","Leave","Holiday","Meeting","Office Work","Transit","Missing"].map((k) => {
+  const legend = ["Valid","Invalid","Leave","Holiday","Meeting","Office Work","Transit","Missing"].map((k) => {
     const spec = DAY_CELL[k] || DAY_CELL["No entry"];
     return '<span class="dg-leg"><i style="background:' + spec.bg + '"></i>' + spec.label + "</span>";
   }).join("") + '<span class="dg-leg"><i class="dg-future-swatch"></i>Future</span>';
@@ -669,17 +707,23 @@ function rmCardHeadClass(row, monthKey) {
   return row.paceClass || "ach-red";
 }
 
-function kpiPair(label, value, hi) {
-  return '<div class="rm-kpi-row' + (hi ? " hi" : "") + '"><dt>' + escapeHtml(label) +
+function kpiPair(label, value, hi, over) {
+  return '<div class="rm-kpi-row' + (hi ? " hi" : "") + (over ? " sop-over" : "") + '"><dt>' + escapeHtml(label) +
     "</dt><dd>" + escapeHtml(value == null || value === "" ? "—" : value) + "</dd></div>";
 }
 
-function hrsTone(hours) {
-  if (hours == null || hours === "") return "";
-  const n = Number(hours);
-  if (n >= 3) return "hrs-green";
-  if (n >= 2) return "hrs-amber";
-  return "hrs-red";
+function townHoursHtml(list, baseTowns) {
+  if (!list || !list.length) return "—";
+  return list.map((t) => {
+    const low = t.counted ? "" : " town-low";
+    const mark = isBaseTownName(t.name, baseTowns) ? '<sup class="town-b">B</sup>' : "";
+    return '<span class="town-chip' + low + '">' + escapeHtml(t.name) + mark + " (" + formatHours(t.hours) + ")</span>";
+  }).join(", ");
+}
+
+function xy(part, whole) {
+  if (part == null) return "—";
+  return part + " / " + (whole == null ? "—" : whole);
 }
 
 function drawRmCards(rows, pack) {
@@ -695,30 +739,34 @@ function drawRmCards(rows, pack) {
       kpiPair("Achieved", s.achieved, true),
       kpiPair("Ach %", s.achievementPctLabel, true),
       kpiPair("Pace", s.paceLabel, true),
+      kpiPair("Other TTY Days", s.otherTtyDays),
+      kpiPair("Base-only Days", s.baseOnlyLabel),
       kpiPair("Base Town Visits", s.baseTownDays),
-      kpiPair("Other TTY Visits", s.otherTtyDays),
+      kpiPair("Avg Prod Hrs / day", s.avgProdHoursLabel),
       kpiPair("Total KMs", s.totalKmsLabel)
     ].join("");
     const right = [
-      kpiPair("Incomplete < 2 hrs", s.invalidDays),
-      kpiPair("Leaves", s.leaveDays),
+      kpiPair("Invalid Days", s.invalidDays),
+      kpiPair("Leaves", s.leavesSopLabel, false, s.leavesOverSop),
       kpiPair("Holidays", s.holidayDays),
-      kpiPair("Office Work", s.officeworkDays),
-      kpiPair("Meetings", s.meetingDays),
+      kpiPair("Office Work", s.officeSopLabel, false, s.officeOverSop),
+      kpiPair("Meetings", s.meetingsSopLabel, false, s.meetingsOverSop),
       kpiPair("Transit", s.transitDays),
       kpiPair("Missing Days", s.missingDays),
-      kpiPair("Towns Not Visited (3M)", (s.townsNotVisited ?? "—") + (s.regionTownCount ? " / " + s.regionTownCount : "")),
+      kpiPair("Territories Not Visited", xy(s.territoriesNotVisited, s.territoryCount)),
+      kpiPair("Towns Not Visited 6M", xy(s.townsNotVisited, s.regionTownCount)),
+      kpiPair("Towns Repeated", s.townsRepeatedLabel),
       kpiPair("Avg KMs / visit day", s.avgKmsPerVisitDayLabel)
     ].join("");
-    const visitDays = (s.days || []).filter((d) => d.isGreen || d.isRed || d.isInvalid);
+    const visitDays = (s.days || []).filter((d) => d.isValid || d.isInvalid);
     const totProd = round2(visitDays.reduce((n, d) => n + (d.dailyProdHours || 0), 0));
     const totTravel = round2(visitDays.reduce((n, d) => n + (d.dailyTravelHours || 0), 0));
     const totHours = round2(visitDays.reduce((n, d) => n + (d.dailyTotalHours || 0), 0));
     const dayRows = visitDays.map((d) => {
-      const tone = hrsTone(d.dailyProdHours);
+      const tone = d.isValid ? "hrs-green" : "hrs-red";
       const travelCls = d.travelClamped ? "hrs-flag" : "";
       return "<tr><td class=\"rm-day-date\">" + escapeHtml(formatDisplayDate(d.dateISO)) +
-        "</td><td class=\"rm-day-towns\">" + escapeHtml(d.towns || "—") + "</td>" +
+        "</td><td class=\"rm-day-towns\">" + townHoursHtml(d.townHours, s.baseTowns) + "</td>" +
         numCell("", d.townCount) +
         numCell("", formatKms(d.dailyKms)) +
         numCell(tone, formatHours(d.dailyProdHours)) +
@@ -736,6 +784,7 @@ function drawRmCards(rows, pack) {
     return '<article class="card rm-report-card" data-copy-title="' + escapeHtml(s.rmName) + '">' +
       '<header class="rm-card-head ' + headCls + '"><div class="rm-card-name">' + escapeHtml(s.rmName) +
       "</div><div class=\"rm-card-sub\">" + escapeHtml(s.region || "—") + " · " + escapeHtml(month) +
+      "</div><div class=\"rm-card-sub\">Base " + escapeHtml(s.baseTown || "—") +
       "</div><div class=\"rm-card-upto\">Data up to " + escapeHtml(upto ? formatDisplayDate(upto) : "—") +
       "</div></header><div class=\"rm-card-body\"><div class=\"rm-kpis\"><div class=\"rm-kpi-col\">" +
       left + "</div><div class=\"rm-kpi-col\">" + right + "</div></div>" +
@@ -775,9 +824,18 @@ function drawRanking(rows) {
       if (c.key === "planAdherencePct") return '<td class="num-cell">' + escapeHtml(row.planAdherenceLabel) + "</td>";
       if (c.key === "totalKms") return '<td class="num-cell">' + escapeHtml(row.totalKmsLabel || "—") + "</td>";
       if (c.key === "avgKmsPerVisitDay") return '<td class="num-cell">' + escapeHtml(row.avgKmsPerVisitDayLabel || "—") + "</td>";
+      if (c.key === "avgProdHours") return '<td class="num-cell">' + escapeHtml(row.avgProdHoursLabel || "—") + "</td>";
+      if (c.key === "baseOnlyNotCounted") {
+        return '<td class="num-cell">' + escapeHtml((row.baseOnlyCounted ?? 0) + " / " + (row.baseOnlyNotCounted ?? 0)) + "</td>";
+      }
+      if (c.key === "territoriesNotVisited") {
+        return '<td class="num-cell">' + escapeHtml(xy(row.territoriesNotVisited, row.territoryCount)) + "</td>";
+      }
       if (c.key === "townsNotVisited") {
-        return "<td>" + escapeHtml(String(row.townsNotVisited ?? "—")) +
-          (row.regionTownCount ? " / " + row.regionTownCount : "") + "</td>";
+        return '<td class="num-cell">' + escapeHtml(xy(row.townsNotVisited, row.regionTownCount)) + "</td>";
+      }
+      if (c.key === "townsRepeated") {
+        return '<td class="num-cell">' + escapeHtml(row.townsRepeatedLabel || "—") + "</td>";
       }
       let val = row[c.key];
       if (val == null || val === "") val = "—";
@@ -823,16 +881,21 @@ function drawMonthComparison(filtered) {
   const names = uniqueSorted(filtered.map((s) => s.rmName));
   const metrics = [
     { key: "target", label: "Target", invert: false },
+    { key: "adjustedTarget", label: "Adjusted Target", invert: false },
     { key: "achieved", label: "Achieved", invert: false },
     { key: "achievementPct", label: "Ach %", invert: false, pct: true },
-    { key: "baseTownDays", label: "Base Town", invert: false },
+    { key: "validDays", label: "Valid", invert: false },
+    { key: "invalidDays", label: "Invalid", invert: true },
+    { key: "baseOnlyDays", label: "Base-only", invert: false },
     { key: "otherTtyDays", label: "Other TTY", invert: false },
-    { key: "invalidDays", label: "Incomplete < 2 hrs", invert: true },
     { key: "leaveDays", label: "Leaves", invert: true },
     { key: "holidayDays", label: "Holidays", invert: false },
     { key: "officeworkDays", label: "Office Work", invert: false },
     { key: "meetingDays", label: "Meetings", invert: false },
-    { key: "townsNotVisited", label: "Towns not visited", invert: true },
+    { key: "territoriesNotVisited", label: "Territories not visited", invert: true },
+    { key: "townsNotVisited", label: "Towns not visited (6M)", invert: true },
+    { key: "townsRepeated", label: "Towns repeated", invert: true },
+    { key: "avgProdHours", label: "Avg prod hrs", invert: false, hrs: true },
     { key: "totalKms", label: "Total KMs", invert: false, kms: true }
   ];
   function findRm(list, name) {
@@ -842,6 +905,7 @@ function drawMonthComparison(filtered) {
     if (val == null || val === "") return "—";
     if (met && met.pct) return formatPct(val);
     if (met && met.kms) return formatKms(val);
+    if (met && met.hrs) return formatHours(val);
     return String(val);
   }
   function deltaHtml(curr, prev, invert) {
@@ -903,7 +967,8 @@ function drawDayDetail() {
     dailyTravelHours: d.dailyTravelHours == null ? "" : formatHours(d.dailyTravelHours),
     dailyTotalHours: d.dailyTotalHours == null ? "" : formatHours(d.dailyTotalHours),
     dailyKms: formatKms(d.dailyKms),
-    baseTownDayLabel: d.isValidVisitDay ? (d.baseTownDay ? "Yes" : "No") : "—"
+    dayTypeLabel: d.isInvalid && d.invalidReason ? (d.dayType + " · " + d.invalidReason) : d.dayType,
+    baseTownKind: d.baseTownKind || "—"
   }));
   const head = DAY_COLS.map((c) => "<th" + (c.num ? ' class="num-cell"' : "") + ">" + c.label + "</th>").join("");
   const body = rows.map((row) => {
@@ -912,6 +977,9 @@ function drawDayDetail() {
       if (c.key === "dayType" || c.key === "status") classes.push(dayTypeClass(row.dayType));
       if (c.num) classes.push("num-cell");
       if (c.key === "dailyTravelHours" && row.travelClamped) classes.push("hrs-flag");
+      if (c.key === "towns") {
+        return "<td>" + townHoursHtml(row.townHours, summary.baseTowns) + "</td>";
+      }
       let val = row[c.key];
       if (val == null || val === "") val = "—";
       const title = (c.key === "dailyTravelHours" && row.travelClamped)

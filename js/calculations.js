@@ -1,6 +1,16 @@
-/* Phase 2 – visit-log KPIs from requirements section 4.
-   SOP / Red / Green / Invalid are decided on TOTAL productive hours
-   per RM per day, never on a single row. */
+/* Visit-log KPIs from requirements section 4 (management SOP, Sep 2026). */
+
+var SOP = {
+  workingDays: 26,
+  defaultTarget: 18,
+  meetings: 3,
+  officeWork: 4,
+  plannedLeaves: 1,
+  minTownHrs: 2,
+  minDayHrs: 5,
+  maxBaseOnlyDays: 4,
+  townCoverageMonths: 6
+};
 
 var STATUS_VISIT = "marketvisit";
 var STATUS_LEAVE = "leave";
@@ -192,18 +202,91 @@ function datesUpTo(monthKey, dataUpTo) {
   return out;
 }
 
-function rollingVisitContext(allVisitPacks, monthKey) {
-  var want = [monthKeyAdd(monthKey, -2), monthKeyAdd(monthKey, -1), monthKey];
+function rollingVisitContext(allVisitPacks, monthKey, monthsBack) {
+  var n = monthsBack == null ? SOP.townCoverageMonths : monthsBack;
+  var want = [];
+  var i;
+  for (i = n - 1; i >= 0; i--) want.push(monthKeyAdd(monthKey, -i));
   var present = [];
-  var rows = [];
+  var packs = [];
   (allVisitPacks || []).forEach(function (pack) {
     if (want.indexOf(pack.month) >= 0) {
       present.push(pack.month);
-      rows = rows.concat(pack.rows || []);
+      packs.push(pack);
     }
   });
   present.sort();
-  return { rows: rows, months: present };
+  return { packs: packs, months: present };
+}
+
+function splitTownList(raw) {
+  return String(raw || "").split(",").map(function (p) { return collapseSpaces(p); }).filter(Boolean);
+}
+
+function parseBaseTowns(raw, territoryRows) {
+  return splitTownList(raw).map(function (name) {
+    return canonicalTown(name, territoryRows) || name;
+  });
+}
+
+function isBaseTownName(name, baseTowns) {
+  var want = collapseSpaces(name).toLowerCase();
+  if (!want) return false;
+  return (baseTowns || []).some(function (b) {
+    return collapseSpaces(b).toLowerCase() === want;
+  });
+}
+
+function townHoursList(visits) {
+  var map = {};
+  (visits || []).forEach(function (r) {
+    var name = r.visitedTown;
+    if (!name) return;
+    var key = name.toLowerCase();
+    if (!map[key]) map[key] = { name: name, hours: 0 };
+    map[key].hours += (r.prodHours || 0);
+  });
+  return Object.keys(map).sort().map(function (k) {
+    var rec = map[k];
+    rec.hours = round2(rec.hours);
+    rec.counted = rec.hours >= SOP.minTownHrs;
+    return rec;
+  });
+}
+
+function formatTownHoursText(list) {
+  return (list || []).map(function (t) {
+    return t.name + " (" + formatHours(t.hours) + ")";
+  }).join(", ");
+}
+
+function adjustedTargetFrom(target, leaveDays) {
+  var t = Number(target) || 0;
+  var leaves = Number(leaveDays) || 0;
+  if (leaves <= SOP.plannedLeaves) return t;
+  return Math.round(t * (SOP.workingDays - (leaves - SOP.plannedLeaves)) / SOP.workingDays);
+}
+
+function countedTownSetForRm(packs, rmInfo, territoryRows) {
+  var seen = {};
+  (packs || []).forEach(function (pack) {
+    var rows = (pack.rows || []).filter(function (v) {
+      return namesLikelySame(v.matchedRmName || v.managerName, rmInfo.rmName);
+    });
+    var groups = {};
+    rows.forEach(function (raw) {
+      if (!raw.dateISO) return;
+      if (!groups[raw.dateISO]) groups[raw.dateISO] = [];
+      groups[raw.dateISO].push(raw);
+    });
+    Object.keys(groups).forEach(function (iso) {
+      var day = buildDayRecord(rmInfo.rmName, iso, groups[iso], rmInfo, territoryRows);
+      (day.countedTownList || []).forEach(function (t) {
+        seen[t.toLowerCase()] = t;
+      });
+    });
+  });
+  return seen;
 }
 
 function monthRangeNote(months) {
@@ -295,12 +378,6 @@ function uniqueSorted(list) {
   return out;
 }
 
-function dayTypeFromHours(prodHours) {
-  if (prodHours >= 3) return "Green";
-  if (prodHours >= 2) return "Red";
-  return "Invalid";
-}
-
 /* Section 4.2 priority when there is no Market Visit that day. */
 function nonVisitDayLabel(rows) {
   var keys = (rows || []).map(function (r) { return statusKey(r.status); });
@@ -354,6 +431,8 @@ function emptyDayRecord(rmName, dateISO) {
     statuses: "",
     towns: "",
     townList: [],
+    townHours: [],
+    countedTownList: [],
     visitCount: 0,
     tripStartLabel: "",
     tripEndLabel: "",
@@ -365,8 +444,8 @@ function emptyDayRecord(rmName, dateISO) {
     isFieldDay: false,
     isValidVisitDay: false,
     dayType: "No entry",
-    isGreen: false,
-    isRed: false,
+    invalidReason: "",
+    isValid: false,
     isInvalid: false,
     isLeave: false,
     isHoliday: false,
@@ -375,7 +454,9 @@ function emptyDayRecord(rmName, dateISO) {
     isTransit: false,
     isMissing: true,
     baseTownDay: false,
+    baseOnlyDay: false,
     otherTtyDay: false,
+    baseTownKind: "—",
     planDeviationText: "",
     remarks: "",
     dailyKms: null,
@@ -392,8 +473,10 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
   var rows = rawRows.map(function (r) { return enrichVisitRow(r, territoryRows); });
   var visits = rows.filter(function (r) { return r.isVisit; });
   var isFieldDay = visits.length > 0;
-  var towns = uniqueSorted(visits.map(function (r) { return r.visitedTown; }));
-  var dailyProd = round2(visits.reduce(function (sum, r) { return sum + (r.prodHours || 0); }, 0));
+  var townHours = townHoursList(visits);
+  var counted = townHours.filter(function (t) { return t.counted; });
+  var towns = townHours.map(function (t) { return t.name; });
+  var dailyProd = round2(townHours.reduce(function (sum, t) { return sum + (t.hours || 0); }, 0));
   var bounds = dayTimeBounds(rows);
   var dailyTotal = bounds ? round2((bounds.max - bounds.min) / 60) : null;
   var prodForTravel = isFieldDay ? (dailyProd || 0) : 0;
@@ -401,11 +484,20 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
   var travelClamped = travelRaw != null && travelRaw < 0;
   var dailyTravel = travelRaw == null ? null : (travelClamped ? 0 : travelRaw);
   var dailyKms = sumKms(rows);
-  var type = isFieldDay ? dayTypeFromHours(dailyProd || 0) : nonVisitDayLabel(rows);
-  var valid = type === "Green" || type === "Red";
-  var baseCanon = canonicalTown(rmInfo && rmInfo.baseTown, territoryRows);
-  var baseTownDay = !!(valid && baseCanon && towns.length === 1 && towns[0].toLowerCase() === baseCanon.toLowerCase());
-  var otherTtyDay = valid && !baseTownDay;
+  var reasons = [];
+  if (isFieldDay) {
+    if ((dailyProd || 0) < SOP.minDayHrs) reasons.push("Under " + SOP.minDayHrs + " hrs");
+    if (!counted.length) reasons.push("No town ≥ " + SOP.minTownHrs + " hrs");
+  }
+  var valid = isFieldDay && (dailyProd || 0) >= SOP.minDayHrs && counted.length > 0;
+  var type = isFieldDay ? (valid ? "Valid" : "Invalid") : nonVisitDayLabel(rows);
+  var baseTowns = parseBaseTowns(rmInfo && rmInfo.baseTown, territoryRows);
+  var countedHasBase = counted.some(function (t) { return isBaseTownName(t.name, baseTowns); });
+  var countedHasOther = counted.some(function (t) { return !isBaseTownName(t.name, baseTowns); });
+  var baseTownVisit = !!(valid && countedHasBase);
+  var baseOnlyDay = !!(valid && counted.length && !countedHasOther);
+  var otherTtyDay = !!(valid && countedHasOther);
+  var baseTownKind = !valid ? "—" : (baseOnlyDay ? "Base-only" : (countedHasBase ? "Base + Other" : "No"));
   var deviations = uniqueSorted(visits.filter(function (r) { return r.planDeviation; }).map(function (r) {
     return r.plannedTownDisplay;
   }));
@@ -417,8 +509,10 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
     dayName: d ? weekdayShort(d) : "",
     status: type,
     statuses: uniqueSorted(rows.map(function (r) { return collapseSpaces(r.status); })).join(", "),
-    towns: towns.join(", "),
+    towns: formatTownHoursText(townHours),
     townList: towns,
+    townHours: townHours,
+    countedTownList: counted.map(function (t) { return t.name; }),
     visitCount: visits.length,
     tripStartLabel: formatMinutesAsTime(bounds ? bounds.min : null),
     tripEndLabel: formatMinutesAsTime(bounds ? bounds.max : null),
@@ -430,12 +524,12 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
     dailyTotalHours: dailyTotal,
     travelClamped: travelClamped,
     dailyKms: dailyKms,
-    townCount: towns.length,
+    townCount: counted.length,
     isFieldDay: isFieldDay,
     isValidVisitDay: valid,
     dayType: type,
-    isGreen: type === "Green",
-    isRed: type === "Red",
+    invalidReason: reasons.join(" · "),
+    isValid: valid,
     isInvalid: type === "Invalid",
     isLeave: type === "Leave",
     isHoliday: type === "Holiday",
@@ -443,8 +537,10 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
     isOfficework: type === "Office Work",
     isTransit: type === "Transit",
     isMissing: false,
-    baseTownDay: baseTownDay,
+    baseTownDay: baseTownVisit,
+    baseOnlyDay: baseOnlyDay,
     otherTtyDay: otherTtyDay,
+    baseTownKind: baseTownKind,
     planDeviationText: deviations.join(", "),
     remarks: remarks.join("; "),
     rows: rows
@@ -504,22 +600,29 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
   var target = Number(rmMasterRow.targetVisits) || 0;
   var leaveDays = countTrue(days, "isLeave");
   var holidayDays = countTrue(days, "isHoliday");
-  var adjustedTarget = target - leaveDays;
-  var achieved = countTrue(days, "isGreen") + countTrue(days, "isRed");
+  var adjustedTarget = adjustedTargetFrom(target, leaveDays);
+  var validDays = countTrue(days, "isValid");
+  var invalidDays = countTrue(days, "isInvalid");
+  var baseTownDays = countTrue(days, "baseTownDay");
+  var baseOnlyDays = countTrue(days, "baseOnlyDay");
+  var baseOnlyCounted = Math.min(baseOnlyDays, SOP.maxBaseOnlyDays);
+  var baseOnlyNotCounted = Math.max(0, baseOnlyDays - SOP.maxBaseOnlyDays);
+  var otherTtyDays = countTrue(days, "otherTtyDay");
+  var achieved = otherTtyDays + baseOnlyCounted;
   var achievementPct = adjustedTarget > 0 ? pct(achieved, adjustedTarget) : null;
   var dim = daysInMonthKey(monthKey);
   var dayNum = dataUpTo ? Number(String(dataUpTo).split("-")[2]) : 0;
   var expectedByNow = (dim && adjustedTarget != null) ? Math.round(adjustedTarget * (dayNum / dim)) : null;
   var pace = paceFrom(achieved, expectedByNow);
 
-  var uniqueTowns = uniqueSorted(visits.map(function (r) { return r.visitedTown; }));
+  var uniqueTowns = uniqueSorted(days.reduce(function (list, d) {
+    return list.concat(d.countedTownList || []);
+  }, []));
+  var totalVisits = days.reduce(function (n, d) { return n + (d.townCount || 0); }, 0);
   var fieldDays = countTrue(days, "isFieldDay");
-  var greenDays = countTrue(days, "isGreen");
-  var redDays = countTrue(days, "isRed");
-  var invalidDays = countTrue(days, "isInvalid");
-  var baseTownDays = countTrue(days, "baseTownDay");
-  var otherTtyDays = countTrue(days, "otherTtyDay");
   var missingDays = countTrue(days, "isMissing");
+  var meetingDays = countTrue(days, "isMeeting");
+  var officeworkDays = countTrue(days, "isOfficework");
 
   var planMatchCount = visits.filter(function (r) { return r.planMatch; }).length;
   var planAdherence = visits.length ? pct(planMatchCount, visits.length) : null;
@@ -528,32 +631,36 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
   var totalTrip = round2(days.reduce(function (s, d) { return s + (d.dailyTripHours || 0); }, 0));
   var totalProd = round2(days.reduce(function (s, d) { return s + (d.dailyProdHours || 0); }, 0));
   var totalTravel = round2(days.reduce(function (s, d) { return s + (d.dailyTravelHours || 0); }, 0));
+  var prodValid = round2(days.filter(function (d) { return d.isValid; }).reduce(function (s, d) {
+    return s + (d.dailyProdHours || 0);
+  }, 0));
   var avgTrip = fieldDays ? round2(totalTrip / fieldDays) : null;
-  var avgProd = fieldDays ? round2(totalProd / fieldDays) : null;
+  var avgProd = validDays ? round2(prodValid / validDays) : null;
   var avgTravel = fieldDays ? round2(totalTravel / fieldDays) : null;
 
   var kmsAll = days.filter(function (d) { return d.dailyKms != null; });
   var totalKms = kmsAll.length ? kmsAll.reduce(function (s, d) { return s + d.dailyKms; }, 0) : null;
-  var visitDays = days.filter(function (d) { return d.isGreen || d.isRed || d.isInvalid; });
+  var visitDays = days.filter(function (d) { return d.isValid || d.isInvalid; });
   var kmsVisitDays = visitDays.filter(function (d) { return d.dailyKms != null; });
   var visitKms = kmsVisitDays.length ? kmsVisitDays.reduce(function (s, d) { return s + d.dailyKms; }, 0) : null;
   var avgKmsPerVisitDay = kmsVisitDays.length ? Math.round(visitKms / kmsVisitDays.length) : null;
 
   var regionTowns = townsInRegion(territoryRows, region);
   var regionTownNames = uniqueSorted(regionTowns.map(function (t) { return t.town; }));
-  var rolling = opts.rollingRows || visitRows || [];
-  var visited3m = {};
-  rolling.forEach(function (raw) {
-    var row = enrichVisitRow(raw, territoryRows);
-    if (!row.isVisit || !row.visitedTown) return;
-    if (!namesLikelySame(row.matchedRmName || row.managerName, rmName)) return;
-    visited3m[row.visitedTown.toLowerCase()] = row.visitedTown;
-  });
+  var countedThisMonth = {};
+  uniqueTowns.forEach(function (t) { countedThisMonth[t.toLowerCase()] = t; });
+  var rolling = rollingVisitContext(opts.allVisitPacks || [], monthKey, SOP.townCoverageMonths);
+  var visited6m = countedTownSetForRm(rolling.packs, rmMasterRow, territoryRows);
+  var lastMonthKey = monthKeyAdd(monthKey, -1);
+  var lastMonthPacks = (opts.allVisitPacks || []).filter(function (p) { return p.month === lastMonthKey; });
+  var lastMonthUploaded = lastMonthPacks.length > 0;
+  var visitedLastMonth = lastMonthUploaded ? countedTownSetForRm(lastMonthPacks, rmMasterRow, territoryRows) : {};
+  var townsRepeated = uniqueTowns.filter(function (t) { return !!visitedLastMonth[t.toLowerCase()]; });
   var townsNotVisited = regionTownNames.filter(function (t) {
-    return !visited3m[t.toLowerCase()];
+    return !visited6m[t.toLowerCase()];
   });
   var townsVisitedInRegion = regionTownNames.filter(function (t) {
-    return !!visited3m[t.toLowerCase()];
+    return !!visited6m[t.toLowerCase()];
   });
   var byTerritory = {};
   townsNotVisited.forEach(function (town) {
@@ -573,14 +680,15 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
     var towns = regionTowns.filter(function (t) {
       return collapseSpaces(t.territory).toLowerCase() === collapseSpaces(ter).toLowerCase();
     });
-    return !towns.some(function (t) { return visited3m[collapseSpaces(t.town).toLowerCase()]; });
+    return !towns.some(function (t) { return countedThisMonth[collapseSpaces(t.town).toLowerCase()]; });
   });
 
   return Object.assign({
     rmName: rmName,
     region: region,
     zone: zone,
-    baseTown: canonicalTown(rmMasterRow.baseTown, territoryRows) || rmMasterRow.baseTown,
+    baseTown: parseBaseTowns(rmMasterRow.baseTown, territoryRows).join(", ") || rmMasterRow.baseTown,
+    baseTowns: parseBaseTowns(rmMasterRow.baseTown, territoryRows),
     target: target,
     leaveDays: leaveDays,
     holidayDays: holidayDays,
@@ -590,18 +698,27 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
     achieved: achieved,
     achievementPct: achievementPct,
     achievementPctLabel: formatPct(achievementPct),
-    totalVisits: visits.length,
+    totalVisits: totalVisits,
     uniqueTownsVisited: uniqueTowns.length,
     uniqueTownsList: uniqueTowns.join(", "),
     fieldDays: fieldDays,
-    validVisitDays: achieved,
-    greenDays: greenDays,
-    redDays: redDays,
+    validVisitDays: validDays,
+    validDays: validDays,
     invalidDays: invalidDays,
     baseTownDays: baseTownDays,
+    baseOnlyDays: baseOnlyDays,
+    baseOnlyCounted: baseOnlyCounted,
+    baseOnlyNotCounted: baseOnlyNotCounted,
+    baseOnlyLabel: baseOnlyNotCounted ? (baseOnlyDays + " · " + baseOnlyCounted + " counted") : String(baseOnlyDays),
     otherTtyDays: otherTtyDays,
-    meetingDays: countTrue(days, "isMeeting"),
-    officeworkDays: countTrue(days, "isOfficework"),
+    meetingDays: meetingDays,
+    officeworkDays: officeworkDays,
+    meetingsOverSop: meetingDays > SOP.meetings,
+    officeOverSop: officeworkDays > SOP.officeWork,
+    leavesOverSop: leaveDays > SOP.plannedLeaves,
+    meetingsSopLabel: meetingDays + " / " + SOP.meetings,
+    officeSopLabel: officeworkDays + " / " + SOP.officeWork,
+    leavesSopLabel: leaveDays + " / " + SOP.plannedLeaves,
     transitDays: countTrue(days, "isTransit"),
     missingDays: missingDays,
     planMatchCount: planMatchCount,
@@ -613,6 +730,7 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
     avgTripHours: avgTrip,
     totalProdHours: totalProd,
     avgProdHours: avgProd,
+    avgProdHoursLabel: formatHours(avgProd),
     totalTravelHours: totalTravel,
     avgTravelHours: avgTravel,
     totalKms: totalKms,
@@ -622,10 +740,15 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
     avgKmsPerVisitDayLabel: formatKms(avgKmsPerVisitDay),
     territoriesNotVisited: territoriesNotVisited.length,
     territoriesNotVisitedList: territoriesNotVisited.join(", "),
+    territoryCount: territories.length,
     townsNotVisited: townsNotVisited.length,
     townsNotVisitedList: townsNotVisited.join(", "),
     townsNotVisitedGrouped: townsNotVisitedGrouped,
-    townsNotVisitedNote: monthRangeNote(opts.rollingMonths || []),
+    townsNotVisitedNote: monthRangeNote(rolling.months || []),
+    townsRepeated: lastMonthUploaded ? townsRepeated.length : null,
+    townsRepeatedList: townsRepeated.join(", "),
+    townsRepeatedLabel: lastMonthUploaded ? (townsRepeated.length + " / " + uniqueTowns.length) : "—",
+    lastMonthUploaded: lastMonthUploaded,
     regionTownCount: regionTownNames.length,
     townsVisitedInRegionCount: townsVisitedInRegion.length,
     coveragePct: regionTownNames.length ? pct(townsVisitedInRegion.length, regionTownNames.length) : null,
@@ -641,12 +764,10 @@ function summarizeMonth(monthKey, visitRows, rmPacks, territoryRows, allVisitPac
   });
   var rms = pack ? pack.rows.slice() : [];
   var dataUpTo = lastDateISO(visitRows);
-  var rolling = rollingVisitContext(allVisitPacks || [], monthKey);
   var opts = {
     monthKey: monthKey,
     dataUpTo: dataUpTo,
-    rollingRows: rolling.rows,
-    rollingMonths: rolling.months
+    allVisitPacks: allVisitPacks || []
   };
   var summaries = rms.map(function (rm) {
     var rows = (visitRows || []).filter(function (v) {

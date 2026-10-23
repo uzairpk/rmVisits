@@ -66,18 +66,21 @@ async function downloadSummaryReport() {
     Achieved: s.achieved,
     "Ach %": s.achievementPctLabel,
     Pace: s.paceLabel,
-    Green: s.greenDays,
-    Red: s.redDays,
+    Valid: s.validDays,
     Invalid: s.invalidDays,
-    "Base Town": s.baseTownDays,
+    "Base-only counted": s.baseOnlyCounted,
+    "Base-only over": s.baseOnlyNotCounted,
     "Other TTY": s.otherTtyDays,
     Leave: s.leaveDays,
     Holiday: s.holidayDays,
     Meeting: s.meetingDays,
     "Office Work": s.officeworkDays,
     Missing: s.missingDays,
-    "Towns not vis. (3M)": (s.townsNotVisited ?? "—") + (s.regionTownCount ? " / " + s.regionTownCount : ""),
+    "Terr. not vis.": (s.territoriesNotVisited ?? "—") + (s.territoryCount ? " / " + s.territoryCount : ""),
+    "Towns not vis. (6M)": (s.townsNotVisited ?? "—") + (s.regionTownCount ? " / " + s.regionTownCount : ""),
+    "Towns repeated": s.townsRepeatedLabel,
     "Plan %": s.planAdherenceLabel,
+    "Avg prod hrs": s.avgProdHoursLabel,
     "Total KMs": s.totalKmsLabel,
     "Avg KMs / day": s.avgKmsPerVisitDayLabel
   }));
@@ -108,8 +111,9 @@ async function downloadDayReport() {
         "Travel hrs": d.dailyTravelHours == null ? "—" : formatHours(d.dailyTravelHours),
         "Total hrs": d.dailyTotalHours == null ? "—" : formatHours(d.dailyTotalHours),
         KMs: formatKms(d.dailyKms),
-        "Day type": d.dayType,
-        "Base town": d.isValidVisitDay ? (d.baseTownDay ? "Yes" : "No") : "—",
+        "Counted towns": d.townCount,
+        "Day type": d.isInvalid && d.invalidReason ? (d.dayType + " · " + d.invalidReason) : d.dayType,
+        "Base town": d.baseTownKind || "—",
         "Plan deviation": d.planDeviationText || "",
         Remarks: d.remarks || ""
       });
@@ -125,9 +129,34 @@ async function downloadTownsReport() {
   if (!rec) return;
   const rows = [];
   rec.rows.filter((s) => !s.unmatched).forEach((s) => {
+    const terrs = (s.territoriesNotVisitedList || "").split(", ").filter(Boolean);
+    if (!terrs.length) {
+      rows.push({
+        Type: "Territory (this month)",
+        RM: s.rmName,
+        Region: s.region,
+        Territory: "",
+        Town: "",
+        Count: "0 / " + (s.territoryCount || 0),
+        Note: ""
+      });
+    } else {
+      terrs.forEach((ter) => {
+        rows.push({
+          Type: "Territory (this month)",
+          RM: s.rmName,
+          Region: s.region,
+          Territory: ter,
+          Town: "",
+          Count: (s.territoriesNotVisited ?? "—") + (s.territoryCount ? " / " + s.territoryCount : ""),
+          Note: ""
+        });
+      });
+    }
     const grouped = s.townsNotVisitedGrouped || "";
     if (!grouped) {
       rows.push({
+        Type: "Town (6 months)",
         RM: s.rmName,
         Region: s.region,
         Territory: "",
@@ -143,6 +172,7 @@ async function downloadTownsReport() {
       const towns = (parts.slice(1).join(": ") || "").split(", ").filter(Boolean);
       towns.forEach((town) => {
         rows.push({
+          Type: "Town (6 months)",
           RM: s.rmName,
           Region: s.region,
           Territory: ter,
@@ -153,8 +183,8 @@ async function downloadTownsReport() {
       });
     });
   });
-  downloadSheet("towns_not_visited_" + rec.month + ".xlsx", rows, "Not visited");
-  showToast("Towns not visited downloaded.");
+  downloadSheet("coverage_" + rec.month + ".xlsx", rows, "Coverage");
+  showToast("Coverage report downloaded.");
 }
 
 async function downloadLeaveReport() {
