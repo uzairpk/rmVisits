@@ -669,7 +669,8 @@ td.type-invalid { color: var(--danger); font-weight: 700; }
 .rm-days td.hrs-green { color: #34d399; font-weight: 700; }
 .rm-days td.hrs-amber { color: #fbbf24; font-weight: 700; }
 .rm-days td.hrs-red { color: #f87171; font-weight: 700; }
-.town-low { color: #64748b; }
+.town-ok { color: #34d399; }
+.town-low { color: #e8a0a0; }
 .town-b { font-size: 0.65em; font-weight: 800; margin-left: 1px; }
 .rm-kpi-row.sop-over dd { color: var(--danger); }
 .alert-reason { font-size: 0.75rem; color: var(--warn); }

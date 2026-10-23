@@ -205,7 +205,7 @@ The header row may not be row 1 – detect the row that contains these headers. 
 - Day table (Market Visit days only – Valid / Invalid):
   Date | Towns | # | KMs | Prod | Travel | Total   (short headers on ONE line; no note under the table)
   - Towns: show each town with its hours, e.g. "FSD-3 (2.5), Chiniot (3.0), Dijkot (1.0)".
-    Towns under 2 hrs shown greyed out. Base towns marked with a small "B".
+    Counted towns (>= 2 hrs) in green, towns under 2 hrs in soft red. Base towns marked with a small "B".
   - # = Counted Towns that day.
   - Prod coloured green if the day is Valid, red if Invalid.
   - Headers and numbers never wrap; only Towns may wrap and gets the remaining width.
@@ -216,7 +216,7 @@ The header row may not be row 1 – detect the row that contains these headers. 
 Columns: Date, Day, Status (day label from 4.2), Towns, Trip Start, Trip End, Total Trip hrs, Prod Start, Prod End,
 Productive hrs, Travel hrs, Total hrs, KMs, Counted Towns, Day Type (Valid/Invalid + reason, or Leave/Holiday/…),
 Base Town (Base-only / Base + Other / No), Plan Deviation (planned town if different), Remarks.
-- Towns column shows each town with its hours; towns under 2 hrs greyed out.
+- Towns column shows each town with its hours; counted towns (>= 2 hrs) in green, towns under 2 hrs in soft red.
 - Show EVERY date of the month up to Data Up To, including Missing days as "No entry" rows.
 - Multi-town days: one row per day; towns comma-separated; times = first start / last end; hours = sums.
 - Totals row at the bottom.

@@ -715,9 +715,9 @@ function kpiPair(label, value, hi, over) {
 function townHoursHtml(list, baseTowns) {
   if (!list || !list.length) return "—";
   return list.map((t) => {
-    const low = t.counted ? "" : " town-low";
+    const tone = t.counted ? " town-ok" : " town-low";
     const mark = isBaseTownName(t.name, baseTowns) ? '<sup class="town-b">B</sup>' : "";
-    return '<span class="town-chip' + low + '">' + escapeHtml(t.name) + mark + " (" + formatHours(t.hours) + ")</span>";
+    return '<span class="town-chip' + tone + '">' + escapeHtml(t.name) + mark + " (" + formatHours(t.hours) + ")</span>";
   }).join(", ");
 }
 
