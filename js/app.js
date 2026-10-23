@@ -37,6 +37,7 @@ function setPage(name) {
   });
   if (name === "master") refreshMasterData();
   if (name === "dashboard" && typeof refreshDashboard === "function") refreshDashboard();
+  if (name === "reports" && typeof refreshReports === "function") refreshReports();
 }
 
 function onHashChange() {

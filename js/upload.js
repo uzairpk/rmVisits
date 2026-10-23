@@ -84,19 +84,27 @@ function parseRmMaster(rawRows, lookup) {
 }
 
 function errorCount(rows) {
-  return rows.filter((r) => Object.keys(r.errors).length).length;
+  return rows.filter((r) => Object.keys(r.errors || {}).length).length;
+}
+
+function warningCount(rows) {
+  return rows.filter((r) => Object.keys(r.warnings || {}).length).length;
 }
 
 function previewTableHtml(columns, rows) {
   const head = columns.map((c) => "<th>" + c.label + "</th>").join("");
   const body = rows.map((row) => {
-    const bad = Object.keys(row.errors).length > 0;
+    const bad = Object.keys(row.errors || {}).length > 0;
+    const warned = Object.keys(row.warnings || {}).length > 0;
     const tds = columns.map((c) => {
-      const cls = row.errors[c.key] ? ' class="cell-error"' : "";
-      const title = row.errors[c.key] ? ' title="' + escapeHtml(row.errors[c.key]) + '"' : "";
+      const err = row.errors && row.errors[c.key];
+      const warn = row.warnings && row.warnings[c.key];
+      const cls = err ? ' class="cell-error"' : (warn ? ' class="cell-warn"' : "");
+      const title = err ? ' title="' + escapeHtml(err) + '"' : (warn ? ' title="' + escapeHtml(warn) + '"' : "");
       return "<td" + cls + title + ">" + escapeHtml(row[c.key] ?? "") + "</td>";
     }).join("");
-    return '<tr class="' + (bad ? "row-error" : "") + '">' + tds + "</tr>";
+    const rowCls = bad ? "row-error" : (warned ? "row-warn" : "");
+    return '<tr class="' + rowCls + '">' + tds + "</tr>";
   }).join("");
   const wide = columns.length > 6 ? " data-wide" : "";
   return '<div class="table-wrap"><table class="data' + wide + '"><thead><tr>' + head + "</tr></thead><tbody>" + body + "</tbody></table></div>";
@@ -105,6 +113,7 @@ function previewTableHtml(columns, rows) {
 function showPreview(containerId, title, columns, rows, onSave, extraHtml) {
   const el = document.getElementById(containerId);
   const bad = errorCount(rows);
+  const warns = warningCount(rows);
   const ok = rows.length - bad;
   el.hidden = false;
   el.innerHTML =
@@ -113,6 +122,7 @@ function showPreview(containerId, title, columns, rows, onSave, extraHtml) {
         "<strong>" + title + "</strong> · " + rows.length + " rows " +
         '<span class="badge badge-ok">' + ok + " ok</span> " +
         (bad ? '<span class="badge badge-bad">' + bad + " with issues</span>" : "") +
+        (warns ? ' <span class="badge badge-warn">' + warns + " warning" + (warns === 1 ? "" : "s") + "</span>" : "") +
       "</div>" +
       '<button type="button" class="btn btn-primary save-btn">Save</button>' +
     "</div>" +
@@ -240,7 +250,8 @@ const VISIT_HEADER_MAP = {
   totalProd: ["total prod time", "total productive time"],
   travelTime: ["travel time"],
   status: ["status"],
-  remarks: ["remarks", "remark"]
+  remarks: ["remarks", "remark"],
+  kms: ["kms", "km", "kilometres", "kilometers", "kilometer", "kilometre"]
 };
 
 const VISIT_IGNORED = { day: true, totalTrip: true, totalProd: true, travelTime: true };
@@ -355,6 +366,16 @@ function parseExcelTime(value) {
   return Number(m[1]) * 60 + Number(m[2]) + Number(m[3] || 0) / 60;
 }
 
+function parseKmsValue(value) {
+  if (value === "" || value == null) return { value: null, error: false };
+  if (typeof value === "number" && Number.isFinite(value)) return { value: value, error: false };
+  const text = String(value).trim().replace(/,/g, "");
+  if (!text) return { value: null, error: false };
+  const n = Number(text);
+  if (!Number.isFinite(n)) return { value: null, error: true };
+  return { value: n, error: false };
+}
+
 function colValue(row, map, key) {
   if (map[key] == null) return "";
   const v = row[map[key]];
@@ -385,12 +406,14 @@ function parseVisitSheet(matrix, rmRows, lookup) {
     const prodEndMin = parseExcelTime(colValue(raw, found.map, "prodEnd"));
     const status = collapseSpaces(colValue(raw, found.map, "status"));
     const remarks = String(colValue(raw, found.map, "remarks") ?? "").trim();
+    const kmsParsed = parseKmsValue(colValue(raw, found.map, "kms"));
 
     const matched = matchRmName(managerName, rmRows);
     const st = statusKey(status);
     const visit = st === STATUS_VISIT;
     const allowed = [STATUS_VISIT, STATUS_LEAVE, STATUS_HOLIDAY, STATUS_MEETING, STATUS_OFFICE, STATUS_TRANSIT];
     const errors = {};
+    const warnings = {};
 
     if (!region) errors.region = "Missing region";
     else if (lookup.regions.size && !lookup.regions.has(norm(region))) errors.region = "Unknown region";
@@ -402,6 +425,8 @@ function parseVisitSheet(matrix, rmRows, lookup) {
 
     if (!status) errors.status = "Missing status";
     else if (allowed.indexOf(st) < 0) errors.status = "Unknown status";
+
+    if (kmsParsed.error) errors.kms = "KMs must be a number";
 
     if (visit) {
       if (!territory) errors.territory = "Missing territory";
@@ -419,6 +444,14 @@ function parseVisitSheet(matrix, rmRows, lookup) {
       if (prodEndMin == null) errors.prodEndLabel = "Missing prod end";
       if (prodStartMin != null && prodEndMin != null && prodEndMin < prodStartMin) {
         errors.prodEndLabel = "End time is before start";
+      }
+      if (tripStartMin != null && tripEndMin != null && tripEndMin >= tripStartMin) {
+        if (prodStartMin != null && (prodStartMin < tripStartMin || prodStartMin > tripEndMin)) {
+          warnings.prodStartLabel = "Prod start is outside trip start/end";
+        }
+        if (prodEndMin != null && (prodEndMin < tripStartMin || prodEndMin > tripEndMin)) {
+          warnings.prodEndLabel = "Prod end is outside trip start/end";
+        }
       }
     }
 
@@ -443,7 +476,9 @@ function parseVisitSheet(matrix, rmRows, lookup) {
       prodEndLabel: formatMinutesAsTime(prodEndMin),
       status,
       remarks,
+      kms: kmsParsed.value,
       errors,
+      warnings,
       rowNum: r + 1
     });
   }
@@ -463,7 +498,8 @@ const VISIT_COLS = [
   { key: "prodStartLabel", label: "Prod Start" },
   { key: "prodEndLabel", label: "Prod End" },
   { key: "status", label: "Status" },
-  { key: "remarks", label: "Remarks" }
+  { key: "remarks", label: "Remarks" },
+  { key: "kms", label: "KMs" }
 ];
 
 let pendingVisitFile = null;
@@ -515,6 +551,9 @@ async function parseSelectedVisitSheet(sheetName) {
     extra += '<div class="unmatched">Unmatched RM names (fix spelling in Excel or RM master): <strong>' +
       unmatched.map(escapeHtml).join(", ") + "</strong></div>";
   }
+  if (warningCount(parsed.rows)) {
+    extra += '<p class="muted tiny">Amber cells: Prod start/end is outside Trip start/end on that row (warning only — still saves).</p>';
+  }
   showPreview("preview-visits", "Visit log preview", VISIT_COLS, parsed.rows, saveVisitsFromPreview, extra);
 }
 
@@ -560,10 +599,13 @@ async function saveVisitsFromPreview() {
   if (errorCount(pendingVisit)) {
     body += " Some rows have issues (highlighted in red). Unmatched names will not count toward an RM’s target until you fix them.";
   }
+  if (warningCount(pendingVisit)) {
+    body += " Some rows have time warnings (Prod outside Trip) highlighted in amber. They still save.";
+  }
   const ok = await confirmModal("Save visit log", body, "Save");
   if (!ok) return;
   for (const m of months) {
-    const clean = byMonth[m].map(({ errors, rowNum, ...row }) => row);
+    const clean = byMonth[m].map(({ errors, warnings, rowNum, ...row }) => row);
     await saveVisitMonth(m, clean);
   }
   showToast("Visit log saved.");

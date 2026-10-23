@@ -179,7 +179,7 @@
         <article class="card upload-card upload-card-wide" data-upload="visits">
           <h2>Visit log</h2>
           <p class="muted">Upload each month. Saving replaces that month’s visits. Extra columns, empty rows, and a Total row are ignored.</p>
-          <p class="cols">Needed columns: <code>Region</code> · <code>Manager Name</code> · <code>Date</code> · <code>Territory</code> · <code>Planned Town</code> · <code>Tracker Presence</code> · trip/prod times · <code>Status</code> · <code>Remarks</code></p>
+          <p class="cols">Needed columns: <code>Region</code> · <code>Manager Name</code> · <code>Date</code> · <code>Territory</code> · <code>Planned Town</code> · <code>Tracker Presence</code> · trip/prod times · <code>Status</code> · <code>Remarks</code> · <code>KMs</code> (optional)</p>
           <label class="dropzone">
             <input type="file" id="file-visits" accept=".xlsx,.xls" />
             <span class="dropzone-title">Choose Excel file</span>
@@ -231,12 +231,27 @@
     <section id="page-reports" class="page">
       <header class="page-header">
         <h1>Reports</h1>
-        <p class="muted">Excel and PDF exports will appear here in a later phase.</p>
+        <p class="muted">Excel downloads for the selected month. PDF comes later.</p>
       </header>
-      <div class="placeholder-card">
-        <h2>Coming later</h2>
-        <p>Monthly summary, day-wise detail, not-visited, town coverage, and leave &amp; meeting reports will be added after visit-log uploads.</p>
-      </div>
+      <article class="card">
+        <div class="card-head">
+          <div>
+            <h2>Excel export</h2>
+            <p class="muted" id="report-meta">Upload a visit log first.</p>
+          </div>
+          <label class="filter">
+            <span>Month</span>
+            <select id="report-month" class="select"></select>
+          </label>
+        </div>
+        <div class="card-actions">
+          <button type="button" class="btn btn-primary" id="btn-report-summary">RM monthly summary</button>
+          <button type="button" class="btn" id="btn-report-days">RM day-wise detail</button>
+          <button type="button" class="btn" id="btn-report-towns">Towns not visited (3M)</button>
+          <button type="button" class="btn" id="btn-report-leave">Leave, holiday &amp; meeting</button>
+          <button type="button" class="btn" id="btn-report-plan">Plan deviation</button>
+        </div>
+      </article>
     </section>
   </main>
 

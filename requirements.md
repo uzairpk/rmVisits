@@ -45,6 +45,7 @@ The header row may not be row 1 – detect the row that contains these headers. 
 | 14 | Travel Time | Number (hrs) | No | 3.70 | Ignored – app recalculates |
 | 15 | Status | Text (list) | Yes | Market Visit | One of: Market Visit, Meeting, Transit, Officework, Leave, Holiday (= weekly off) |
 | 16 | Remarks | Text | No | Monthly Meeting | Free text |
+| 17 | KMs | Number | No | 145 | Distance travelled for that row; app sums per day; blank allowed (old files without this column still upload) |
 
 - A row counts as a visit only when Status = "Market Visit".
 - Rows with Status other than Market Visit usually have blank times and towns – that is valid.
@@ -55,6 +56,7 @@ The header row may not be row 1 – detect the row that contains these headers. 
 ### 3.4 Upload validation
 - Show a preview of rows before saving.
 - Flag rows with: unknown RM name, unknown town/territory, missing date, end time before start time.
+- Warn (not block) when Prod. Start/End falls outside Trip Start/End on the same row – shows inconsistent time entry.
 - RM names must match the RM master (current sheet has "Afzaal Cheema" vs "AFZAL CHEEMA" – matching must
   be case-insensitive and trimmed; show unmatched names so I can fix them).
 
@@ -79,12 +81,16 @@ Priority order when an RM has several rows on the same date:
 2. Else **Leave** → Leave Day
 3. Else **Holiday** → Holiday Day (weekly off day)
 4. Else **Meeting** → Meeting Day
-5. Else **Officework** → OW Day
+5. Else **Officework** → Office Work Day
 6. Else **Transit** → Transit Day (whole day travelling, no market visit)
 7. No row at all for a date (up to the last date in the uploaded log) → **Missing Day**
 
 - **Daily Productive Time** = sum of productive time of all Market Visit rows that day
-- **Daily Travel Time** = sum of travel time of all rows that day (incl. Transit rows with times)
+- **Daily Total Hrs** = from the EARLIEST time to the LATEST time that day, across all Trip Start/End and Prod. Start/End
+  times of all rows (Market Visit and Transit). This works however the RM fills the times.
+- **Daily Travel Time** = Daily Total Hrs − Daily Productive Time (never negative; if negative show 0 and flag the day)
+- **Daily KMs** = sum of KMs of all rows that day (incl. Transit rows); blank = no data (not zero)
+- **# Towns (day)** = distinct Tracker Presence towns that day
 - **Base Town Day** = Green/Red day where the ONLY town visited all day is the RM's Base Town
 - **Other TTY Day** = Green/Red day that is not a Base Town Day
   (Base Town Days + Other TTY Days = Achieved)
@@ -95,13 +101,16 @@ Priority order when an RM has several rows on the same date:
 - **Achieved** = Green Days + Red Days
 - **Achievement %** = Achieved ÷ Adjusted Target
 - **Data Up To** = last date present in the uploaded visit log for that month
-- **Expected by Now** = Adjusted Target × (day number of Data Up To ÷ days in month), rounded
+- **Expected by Now** = Adjusted Target × (day number of Data Up To ÷ days in month), rounded (calendar days)
   (at month end this equals Adjusted Target)
 - **Pace** = Achieved − Expected by Now →  ≥ 0 "On track" (green), −1 to −2 "Slightly behind" (amber), ≤ −3 "Behind" (red)
-- Counts: Green, Red, Invalid, Base Town, Other TTY, Leave, Holiday, Meeting, OW, Transit, Missing days
+- Counts: Green, Red, Invalid, Base Town, Other TTY, Leave, Holiday, Meeting, Office Work, Transit, Missing days
 - **Total Visits** = number of Market Visit rows; **Unique Towns Visited** = distinct Tracker Presence towns
 - **Plan Adherence %** = Market Visit rows where Planned = Tracker ÷ Market Visit rows
 - **Total / average** trip, productive, travel time (average per Field Day)
+- **Total KMs** = sum of Daily KMs
+- **Avg KMs / visit day** = total KMs on Green/Red/Invalid days ÷ number of those days that have KMs data
+- Show "—" wherever there is no KMs data
 
 ### 4.4 Towns not visited (rolling 3 months)
 - For the selected month M, look at visit data of M, M−1 and M−2 together (whatever of these months is uploaded).
@@ -120,6 +129,9 @@ Priority order when an RM has several rows on the same date:
 - The copied image must include the block title, the month and "Data up to <date>", with nothing cut off
   (no scrollbars, full table height, no truncated names).
 - No horizontal scroll: tables must fit; wrap text, never truncate RM names with "...".
+- Date format everywhere: "12-Oct Mon". Hours: 2 decimals. KMs: no decimals, thousands separator. Numbers right-aligned.
+- Status label "Officework" is displayed as "Office Work" (never "OW").
+- Copy image: captures only that block, tight crop with 12px padding, 2x resolution, no empty space.
 
 ### 5.1 KPI cards (keep current ones, add Holiday Days and Pace)
 
@@ -128,7 +140,7 @@ Priority order when an RM has several rows on the same date:
    show a marker for Expected by Now.
 2. **Plan Adherence % by RM** (existing)
 3. **RM × Date grid** – one row per RM, one column per date of the month, each cell coloured by day type
-   (Green, Red, Invalid, Leave, Holiday, Meeting, OW, Transit, Missing, future = empty). Legend underneath.
+   (Green, Red, Invalid, Leave, Holiday, Meeting, Office Work, Transit, Missing, future = empty). Legend underneath.
    Hover shows towns and productive hours.
 4. **Base Town vs Other TTY by RM** – stacked horizontal bar
 5. **Average productive hrs per visit day by RM** – bar with reference lines at 2 hrs and 3 hrs
@@ -138,37 +150,51 @@ Priority order when an RM has several rows on the same date:
 ### 5.3 RM Ranking table
 - Merge "RM Ranking" and "RM Summary" into ONE table, sortable.
 - Columns: RM, Region, Adj. Target, Expected by Now, Achieved, Ach %, Pace, Green, Red, Invalid, Base Town,
-  Other TTY, Leave, Holiday, Meeting, OW, Missing, Towns Not Visited (3M), Plan %.
+  Other TTY, Leave, Holiday, Meeting, Office Work, Missing, Towns Not Visited (3M), Plan %, Total KMs, Avg KMs / day.
 
-### 5.4 RM Cards (one per RM, in a grid – like the current WhatsApp report)
-Header bar with RM name, Region and Month, coloured green if Ach % ≥ 100%, amber 70–99%, red < 70%.
-KPI block (2 columns: label | value):
-Target · Adjusted Target · Expected by Now · Achieved · Ach % · Pace · Base Town Visits · Other TTY Visits ·
-Incomplete Visits < 2 hrs · Leaves · Holidays · OW · Meetings · Transit · Missing Days · Towns Not Visited (3M)
-Below the KPI block: compact day list – Date | Towns | Productive hrs (Green/Red/Invalid days only).
-Each card has its own Copy image button.
+### 5.4 RM Cards (one per RM, in a grid – WhatsApp-ready)
+- Fixed width 560px (never stretched); 2–3 cards per row on a big screen.
+- Coloured header only (no duplicate title bar): RM name, Region · Month, "Data up to <date>".
+  Header colour follows Pace (green On track, amber Slightly behind, red Behind).
+  At month end (Data Up To = last day of month) colour by Ach %: green ≥ 100%, amber 70–99%, red < 70%.
+- KPI block in 2 columns (label | value, values close to labels):
+  - Left: Target, Adjusted Target, Expected by Now, **Achieved**, **Ach %**, **Pace**, Base Town Visits,
+    Other TTY Visits, Total KMs
+  - Right: Incomplete < 2 hrs, Leaves, Holidays, Office Work, Meetings, Transit, Missing Days, Towns Not Visited (3M),
+    Avg KMs / visit day
+  - Both columns have 9 rows, so no empty space.
+  - Achieved, Ach % and Pace bold and slightly larger.
+- Day table (visit days only – Green / Red / Invalid):
+  Date | Towns | # | KMs | Prod | Travel | Total   (short headers on ONE line; no note under the table)
+  - Headers and numbers never wrap; only Towns may wrap. Give Towns the remaining width.
+  - Prod hrs coloured green (≥ 3), amber (2–3), red (< 2)
+  - Towns may wrap to 2 lines; numbers never wrap
+  - Bold Totals row: # Towns = DISTINCT towns in the month; KMs and hours = sums
+- Own Copy image button.
 
 ### 5.5 Day Detail table (per selected RM – keep current table, add columns)
 Columns: Date, Day, Status (day label from 4.2), Towns, Trip Start, Trip End, Total Trip hrs, Prod Start, Prod End,
-Productive hrs, Travel hrs, Day Type, Base Town (Yes/No), Plan Deviation (planned town if different), Remarks.
+Productive hrs, Travel hrs, Total hrs, KMs, Day Type, Base Town (Yes/No), Plan Deviation (planned town if different), Remarks.
 - Show EVERY date of the month up to Data Up To, including Missing days as "No entry" rows.
 - Multi-town days: one row per day; towns comma-separated; times = first start / last end; hours = sums.
 - Totals row at the bottom.
 
 ### 5.6 Month Comparison table (separate block)
 - Rows = RMs, grouped by metric OR per-RM mini table – columns = last 3 uploaded months (e.g. Aug | Sep | Oct).
-- Metrics: Target, Achieved, Ach %, Base Town, Other TTY, Incomplete < 2 hrs, Leaves, Holidays, OW, Meetings,
-  Towns Not Visited.
+- Metrics: Target, Achieved, Ach %, Base Town, Other TTY, Incomplete < 2 hrs, Leaves, Holidays, Office Work, Meetings,
+  Towns Not Visited, Total KMs.
 - Change vs previous month shown with ▲ / ▼ in green/red.
 
 ### 5.7 Alerts panel
-- Missing days (only up to Data Up To, never up to today)
-- Invalid days (RM, date, towns, productive hrs)
-- Base town in RM master not found in territory structure
+- One title per panel with count badge, month and "Data up to" date (no duplicate titles).
+- **Missing days**: only up to Data Up To, never up to today.
+- **Invalid days**: each line = RM name, then "12-Oct Mon · Towns · 1.25 hrs productive · 6.1 hrs travel",
+  with Remarks in italics underneath if any.
+- **Base town mismatch**: base town in RM master not found in territory structure.
 
 ## 6. Reports (each exportable to Excel; PDF later)
-1. RM Monthly Summary (same as Ranking table)
-2. RM Day-wise Detail (same as Day Detail, all RMs)
+1. RM Monthly Summary (same as Ranking table, incl. Total KMs and Avg KMs / day)
+2. RM Day-wise Detail (same as Day Detail incl. KMs, all RMs)
 3. Towns Not Visited (3M) by RM / territory
 4. Leave, Holiday & Meeting report – dates and remarks per RM
 5. Plan Deviation report – every visit where planned town ≠ tracker town

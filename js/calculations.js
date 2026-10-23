@@ -39,6 +39,33 @@ function formatHours(value) {
   return value == null ? "—" : Number(value).toFixed(2);
 }
 
+function formatKms(value) {
+  if (value == null || value === "") return "—";
+  var n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function sumKms(rows) {
+  var any = false;
+  var total = 0;
+  (rows || []).forEach(function (r) {
+    if (r.kms == null || r.kms === "") return;
+    var n = Number(r.kms);
+    if (!Number.isFinite(n)) return;
+    any = true;
+    total += n;
+  });
+  return any ? total : null;
+}
+
+function formatDisplayDate(iso) {
+  var d = parseISODate(iso);
+  if (!d) return iso || "";
+  var names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return String(d.getDate()).padStart(2, "0") + "-" + names[d.getMonth()] + " " + weekdayShort(d);
+}
+
 function formatMinutesAsTime(mins) {
   if (mins == null || mins === "") return "";
   var n = Number(mins);
@@ -301,6 +328,22 @@ function maxMins(rows, field) {
   return Math.max.apply(null, vals.map(Number));
 }
 
+/* Section 4.2 – earliest to latest Trip/Prod time on Market Visit and Transit rows. */
+function dayTimeBounds(rows) {
+  var times = [];
+  (rows || []).forEach(function (r) {
+    var st = statusKey(r.status);
+    if (st !== STATUS_VISIT && st !== STATUS_TRANSIT) return;
+    [r.tripStartMin, r.tripEndMin, r.prodStartMin, r.prodEndMin].forEach(function (m) {
+      if (m == null || m === "") return;
+      var n = Number(m);
+      if (Number.isFinite(n)) times.push(n);
+    });
+  });
+  if (!times.length) return null;
+  return { min: Math.min.apply(null, times), max: Math.max.apply(null, times) };
+}
+
 function emptyDayRecord(rmName, dateISO) {
   var d = parseISODate(dateISO);
   return {
@@ -335,6 +378,10 @@ function emptyDayRecord(rmName, dateISO) {
     otherTtyDay: false,
     planDeviationText: "",
     remarks: "",
+    dailyKms: null,
+    townCount: 0,
+    dailyTotalHours: null,
+    travelClamped: false,
     rows: []
   };
 }
@@ -347,8 +394,13 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
   var isFieldDay = visits.length > 0;
   var towns = uniqueSorted(visits.map(function (r) { return r.visitedTown; }));
   var dailyProd = round2(visits.reduce(function (sum, r) { return sum + (r.prodHours || 0); }, 0));
-  var dailyTrip = round2(rows.reduce(function (sum, r) { return sum + (r.tripHours || 0); }, 0));
-  var dailyTravel = round2(rows.reduce(function (sum, r) { return sum + (r.travelHours || 0); }, 0));
+  var bounds = dayTimeBounds(rows);
+  var dailyTotal = bounds ? round2((bounds.max - bounds.min) / 60) : null;
+  var prodForTravel = isFieldDay ? (dailyProd || 0) : 0;
+  var travelRaw = dailyTotal == null ? null : round2(dailyTotal - prodForTravel);
+  var travelClamped = travelRaw != null && travelRaw < 0;
+  var dailyTravel = travelRaw == null ? null : (travelClamped ? 0 : travelRaw);
+  var dailyKms = sumKms(rows);
   var type = isFieldDay ? dayTypeFromHours(dailyProd || 0) : nonVisitDayLabel(rows);
   var valid = type === "Green" || type === "Red";
   var baseCanon = canonicalTown(rmInfo && rmInfo.baseTown, territoryRows);
@@ -358,7 +410,6 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
     return r.plannedTownDisplay;
   }));
   var remarks = uniqueSorted(rows.map(function (r) { return collapseSpaces(r.remarks); }));
-  var timeRows = isFieldDay ? visits : rows;
   var d = parseISODate(dateISO);
   return {
     rmName: rmName,
@@ -369,13 +420,17 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
     towns: towns.join(", "),
     townList: towns,
     visitCount: visits.length,
-    tripStartLabel: formatMinutesAsTime(minMins(timeRows, "tripStartMin")),
-    tripEndLabel: formatMinutesAsTime(maxMins(timeRows, "tripEndMin")),
+    tripStartLabel: formatMinutesAsTime(bounds ? bounds.min : null),
+    tripEndLabel: formatMinutesAsTime(bounds ? bounds.max : null),
     prodStartLabel: formatMinutesAsTime(minMins(visits, "prodStartMin")),
     prodEndLabel: formatMinutesAsTime(maxMins(visits, "prodEndMin")),
     dailyProdHours: isFieldDay ? dailyProd : null,
-    dailyTripHours: dailyTrip,
+    dailyTripHours: dailyTotal,
     dailyTravelHours: dailyTravel,
+    dailyTotalHours: dailyTotal,
+    travelClamped: travelClamped,
+    dailyKms: dailyKms,
+    townCount: towns.length,
     isFieldDay: isFieldDay,
     isValidVisitDay: valid,
     dayType: type,
@@ -477,6 +532,13 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
   var avgProd = fieldDays ? round2(totalProd / fieldDays) : null;
   var avgTravel = fieldDays ? round2(totalTravel / fieldDays) : null;
 
+  var kmsAll = days.filter(function (d) { return d.dailyKms != null; });
+  var totalKms = kmsAll.length ? kmsAll.reduce(function (s, d) { return s + d.dailyKms; }, 0) : null;
+  var visitDays = days.filter(function (d) { return d.isGreen || d.isRed || d.isInvalid; });
+  var kmsVisitDays = visitDays.filter(function (d) { return d.dailyKms != null; });
+  var visitKms = kmsVisitDays.length ? kmsVisitDays.reduce(function (s, d) { return s + d.dailyKms; }, 0) : null;
+  var avgKmsPerVisitDay = kmsVisitDays.length ? Math.round(visitKms / kmsVisitDays.length) : null;
+
   var regionTowns = townsInRegion(territoryRows, region);
   var regionTownNames = uniqueSorted(regionTowns.map(function (t) { return t.town; }));
   var rolling = opts.rollingRows || visitRows || [];
@@ -553,6 +615,11 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
     avgProdHours: avgProd,
     totalTravelHours: totalTravel,
     avgTravelHours: avgTravel,
+    totalKms: totalKms,
+    totalKmsLabel: formatKms(totalKms),
+    visitKms: visitKms,
+    avgKmsPerVisitDay: avgKmsPerVisitDay,
+    avgKmsPerVisitDayLabel: formatKms(avgKmsPerVisitDay),
     territoriesNotVisited: territoriesNotVisited.length,
     territoriesNotVisitedList: territoriesNotVisited.join(", "),
     townsNotVisited: townsNotVisited.length,

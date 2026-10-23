@@ -13,17 +13,19 @@ const COLOR = {
 };
 
 const DAY_COLS = [
-  { key: "dateISO", label: "Date" },
+  { key: "dateLabel", label: "Date" },
   { key: "dayName", label: "Day" },
   { key: "status", label: "Status" },
   { key: "towns", label: "Towns" },
   { key: "tripStartLabel", label: "Trip start" },
   { key: "tripEndLabel", label: "Trip end" },
-  { key: "dailyTripHours", label: "Trip hrs" },
+  { key: "dailyTripHours", label: "Trip hrs", num: true },
   { key: "prodStartLabel", label: "Prod start" },
   { key: "prodEndLabel", label: "Prod end" },
-  { key: "dailyProdHours", label: "Prod hrs" },
-  { key: "dailyTravelHours", label: "Travel hrs" },
+  { key: "dailyProdHours", label: "Prod hrs", num: true },
+  { key: "dailyTravelHours", label: "Travel hrs", num: true },
+  { key: "dailyTotalHours", label: "Total hrs", num: true },
+  { key: "dailyKms", label: "KMs", num: true },
   { key: "dayType", label: "Day type" },
   { key: "baseTownDayLabel", label: "Base town" },
   { key: "planDeviationText", label: "Plan deviation" },
@@ -49,7 +51,9 @@ const RANK_COLS = [
   { key: "officeworkDays", label: "Office Work" },
   { key: "missingDays", label: "Missing" },
   { key: "townsNotVisited", label: "Towns not vis. (3M)" },
-  { key: "planAdherencePct", label: "Plan %" }
+  { key: "planAdherencePct", label: "Plan %" },
+  { key: "totalKms", label: "Total KMs", num: true },
+  { key: "avgKmsPerVisitDay", label: "Avg KMs / day", num: true }
 ];
 
 let dashCache = { visits: [], rms: [], territory: [], summaries: [], filtered: [] };
@@ -262,7 +266,7 @@ function drawDashboard() {
   const dataUpTo = (filtered[0] && filtered[0].dataUpTo) || lastDateISO(pack.rows);
   dashCache.dataUpTo = dataUpTo;
   document.getElementById("dash-subtitle").textContent =
-    monthPretty(pack.month) + " · Data up to " + (dataUpTo || "—") + " · " +
+    monthPretty(pack.month) + " · Data up to " + (dataUpTo ? formatDisplayDate(dataUpTo) : "—") + " · " +
     filtered.length + " RM" + (filtered.length === 1 ? "" : "s");
   drawKpis(filtered);
   drawAlerts(filtered, pack);
@@ -328,11 +332,17 @@ function sum(rows, key) {
   return rows.reduce((n, r) => n + (Number(r[key]) || 0), 0);
 }
 
+function alertMetaLine() {
+  const month = dashCache.pack ? monthPretty(dashCache.pack.month) : "";
+  const upto = dashCache.dataUpTo ? formatDisplayDate(dashCache.dataUpTo) : "—";
+  return (month || "—") + " · Data up to " + upto;
+}
+
 function drawAlerts(rows, pack) {
   const missing = [];
   rows.filter((s) => !s.unmatched).forEach((s) => {
     (s.days || []).filter((d) => d.isMissing).forEach((d) => {
-      missing.push({ rmName: s.rmName, dateISO: d.dateISO });
+      missing.push({ rmName: s.rmName, dateISO: d.dateISO, dayName: d.dayName });
     });
   });
 
@@ -342,8 +352,11 @@ function drawAlerts(rows, pack) {
       invalid.push({
         rmName: s.rmName,
         dateISO: d.dateISO,
+        dayName: d.dayName,
         towns: d.towns || "—",
-        hrs: d.dailyProdHours == null ? "—" : formatHours(d.dailyProdHours)
+        prod: formatHours(d.dailyProdHours),
+        travel: formatHours(d.dailyTravelHours),
+        remarks: d.remarks || ""
       });
     });
   });
@@ -355,32 +368,36 @@ function drawAlerts(rows, pack) {
     return !townSet[norm(s.baseTown)];
   });
 
-  const until = dashCache.dataUpTo || "Data Up To";
   document.getElementById("alert-grid").innerHTML =
-    alertCard("Missing days", "No log row up to " + until + " (not today)", missing.length,
-      missing.length ? missing.map((m) => alertLine(m.rmName, m.dateISO, "", m.rmName)).join("") : '<p class="empty">None in this view.</p>') +
-    alertCard("Invalid days", "Field days under 2 productive hours", invalid.length,
-      invalid.length ? invalid.map((m) => alertLine(m.rmName, m.dateISO + " · " + m.towns, m.hrs + " hrs", m.rmName)).join("") : '<p class="empty">None in this view.</p>') +
-    alertCard("Base town mismatch", "Base town not found in territory structure", baseBad.length,
-      baseBad.length ? baseBad.map((s) => alertLine(s.rmName, s.baseTown || "—", s.region, s.rmName)).join("") : '<p class="empty">None in this view.</p>');
+    alertCard("Missing days", missing.length,
+      missing.length ? missing.map((m) => alertLine(m.rmName, formatDisplayDate(m.dateISO), "", m.rmName)).join("") : '<p class="empty">None in this view.</p>') +
+    alertCard("Invalid days", invalid.length,
+      invalid.length ? invalid.map((m) => {
+        const sub = formatDisplayDate(m.dateISO) + " · " + m.towns + " · " + m.prod + " hrs productive · " + m.travel + " hrs travel";
+        return alertLine(m.rmName, sub, m.remarks, m.rmName);
+      }).join("") : '<p class="empty">None in this view.</p>') +
+    alertCard("Base town mismatch", baseBad.length,
+      baseBad.length ? baseBad.map((s) => alertLine(s.rmName, s.baseTown || "—", "", s.rmName)).join("") : '<p class="empty">None in this view.</p>');
 
   document.getElementById("alert-grid").querySelectorAll("[data-rm]").forEach((el) => {
     el.addEventListener("click", () => openRmDetail(el.dataset.rm));
   });
 }
 
-function alertCard(title, hint, count, body) {
+function alertCard(title, count, body) {
   return '<article class="card alert-card" data-copy-title="' + escapeHtml(title) + '">' +
     '<div class="alert-head"><h2>' + escapeHtml(title) + '</h2><span class="badge ' +
     (count ? "badge-bad" : "badge-ok") + '">' + count + "</span></div>" +
-    '<p class="muted tiny alert-hint">' + escapeHtml(hint) + "</p>" +
+    '<p class="muted tiny alert-meta">' + escapeHtml(alertMetaLine()) + "</p>" +
     '<div class="alert-list">' + body + "</div></article>";
 }
 
-function alertLine(title, sub, extra, rm) {
+function alertLine(title, sub, remarks, rm) {
   return '<button type="button" class="alert-line" data-rm="' + escapeHtml(rm) + '">' +
     '<span class="alert-title">' + escapeHtml(title) + "</span>" +
-    '<span class="alert-sub">' + escapeHtml(sub) + (extra ? " · " + escapeHtml(extra) : "") + "</span></button>";
+    '<span class="alert-sub">' + escapeHtml(sub) + "</span>" +
+    (remarks ? '<span class="alert-remarks">' + escapeHtml(remarks) + "</span>" : "") +
+    "</button>";
 }
 
 function chartOpts(extra) {
@@ -616,8 +633,8 @@ function drawDateGrid(rows, pack) {
       const type = d ? d.dayType : "No entry";
       const spec = DAY_CELL[type] || DAY_CELL["No entry"];
       const tip = (d && d.isFieldDay)
-        ? (s.rmName + " · " + iso + " · " + type + " · " + (d.towns || "—") + " · " + formatHours(d.dailyProdHours) + " hrs")
-        : (s.rmName + " · " + iso + " · " + type);
+        ? (s.rmName + " · " + formatDisplayDate(iso) + " · " + type + " · " + (d.towns || "—") + " · " + formatHours(d.dailyProdHours) + " hrs")
+        : (s.rmName + " · " + formatDisplayDate(iso) + " · " + type);
       return '<td class="dg-cell" style="background:' + spec.bg + '" title="' + escapeHtml(tip) + '" data-rm="' +
         escapeHtml(s.rmName) + '"></td>';
     }).join("");
@@ -634,18 +651,9 @@ function drawDateGrid(rows, pack) {
   });
 }
 
-function formatCardDate(iso, dayName) {
-  const p = String(iso || "").split("-");
-  if (p.length !== 3) return iso || "";
-  const names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return p[2] + "-" + names[Number(p[1]) - 1] + (dayName ? " " + dayName : "");
-}
-
-function formatDmy(iso) {
-  const p = String(iso || "").split("-");
-  if (p.length !== 3) return iso || "";
-  const names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return p[2] + "-" + names[Number(p[1]) - 1] + "-" + p[0];
+function numCell(cls, value, title) {
+  return '<td class="rm-num' + (cls ? " " + cls : "") + '"' +
+    (title ? ' title="' + escapeHtml(title) + '"' : "") + ">" + escapeHtml(value) + "</td>";
 }
 
 function isMonthComplete(monthKey, dataUpTo) {
@@ -671,7 +679,7 @@ function hrsTone(hours) {
   const n = Number(hours);
   if (n >= 3) return "hrs-green";
   if (n >= 2) return "hrs-amber";
-  return "";
+  return "hrs-red";
 }
 
 function drawRmCards(rows, pack) {
@@ -688,7 +696,8 @@ function drawRmCards(rows, pack) {
       kpiPair("Ach %", s.achievementPctLabel, true),
       kpiPair("Pace", s.paceLabel, true),
       kpiPair("Base Town Visits", s.baseTownDays),
-      kpiPair("Other TTY Visits", s.otherTtyDays)
+      kpiPair("Other TTY Visits", s.otherTtyDays),
+      kpiPair("Total KMs", s.totalKmsLabel)
     ].join("");
     const right = [
       kpiPair("Incomplete < 2 hrs", s.invalidDays),
@@ -698,24 +707,43 @@ function drawRmCards(rows, pack) {
       kpiPair("Meetings", s.meetingDays),
       kpiPair("Transit", s.transitDays),
       kpiPair("Missing Days", s.missingDays),
-      kpiPair("Towns Not Visited (3M)", (s.townsNotVisited ?? "—") + (s.regionTownCount ? " / " + s.regionTownCount : ""))
+      kpiPair("Towns Not Visited (3M)", (s.townsNotVisited ?? "—") + (s.regionTownCount ? " / " + s.regionTownCount : "")),
+      kpiPair("Avg KMs / visit day", s.avgKmsPerVisitDayLabel)
     ].join("");
-    const dayRows = (s.days || []).filter((d) => d.isGreen || d.isRed || d.isInvalid).map((d) => {
+    const visitDays = (s.days || []).filter((d) => d.isGreen || d.isRed || d.isInvalid);
+    const totProd = round2(visitDays.reduce((n, d) => n + (d.dailyProdHours || 0), 0));
+    const totTravel = round2(visitDays.reduce((n, d) => n + (d.dailyTravelHours || 0), 0));
+    const totHours = round2(visitDays.reduce((n, d) => n + (d.dailyTotalHours || 0), 0));
+    const dayRows = visitDays.map((d) => {
       const tone = hrsTone(d.dailyProdHours);
-      return "<tr><td class=\"rm-day-date\">" + escapeHtml(formatCardDate(d.dateISO, d.dayName)) +
-        "</td><td class=\"rm-day-towns\">" + escapeHtml(d.towns || "—") +
-        "</td><td class=\"rm-day-hrs" + (tone ? " " + tone : "") + "\">" +
-        escapeHtml(formatHours(d.dailyProdHours)) + "</td></tr>";
+      const travelCls = d.travelClamped ? "hrs-flag" : "";
+      return "<tr><td class=\"rm-day-date\">" + escapeHtml(formatDisplayDate(d.dateISO)) +
+        "</td><td class=\"rm-day-towns\">" + escapeHtml(d.towns || "—") + "</td>" +
+        numCell("", d.townCount) +
+        numCell("", formatKms(d.dailyKms)) +
+        numCell(tone, formatHours(d.dailyProdHours)) +
+        numCell(travelCls, formatHours(d.dailyTravelHours), d.travelClamped ? "Productive hours exceeded the day span; travel shown as 0" : "") +
+        numCell("", formatHours(d.dailyTotalHours)) + "</tr>";
     }).join("");
+    const foot = visitDays.length
+      ? "<tfoot><tr class=\"rm-day-totals\"><td>Totals</td><td></td>" +
+        numCell("", s.uniqueTownsVisited) +
+        numCell("", formatKms(s.visitKms)) +
+        numCell("", formatHours(totProd)) +
+        numCell("", formatHours(totTravel)) +
+        numCell("", formatHours(totHours)) + "</tr></tfoot>"
+      : "";
     return '<article class="card rm-report-card" data-copy-title="' + escapeHtml(s.rmName) + '">' +
       '<header class="rm-card-head ' + headCls + '"><div class="rm-card-name">' + escapeHtml(s.rmName) +
       "</div><div class=\"rm-card-sub\">" + escapeHtml(s.region || "—") + " · " + escapeHtml(month) +
-      "</div><div class=\"rm-card-upto\">Data up to " + escapeHtml(upto ? formatDmy(upto) : "—") +
+      "</div><div class=\"rm-card-upto\">Data up to " + escapeHtml(upto ? formatDisplayDate(upto) : "—") +
       "</div></header><div class=\"rm-card-body\"><div class=\"rm-kpis\"><div class=\"rm-kpi-col\">" +
       left + "</div><div class=\"rm-kpi-col\">" + right + "</div></div>" +
-      '<table class="rm-days"><thead><tr><th>Date</th><th>Towns</th><th>Prod hrs</th></tr></thead><tbody>' +
-      (dayRows || '<tr><td colspan="3" class="rm-day-empty">No field days</td></tr>') +
-      "</tbody></table></div></article>";
+      '<table class="rm-days"><thead><tr><th>Date</th><th>Towns</th><th class="rm-num">#</th>' +
+      '<th class="rm-num">KMs</th><th class="rm-num">Prod</th><th class="rm-num">Travel</th>' +
+      '<th class="rm-num">Total</th></tr></thead><tbody>' +
+      (dayRows || '<tr><td colspan="7" class="rm-day-empty">No field days</td></tr>') +
+      "</tbody>" + foot + "</table></div></article>";
   }).join("");
 }
 
@@ -732,7 +760,7 @@ function drawRanking(rows) {
   });
   const head = RANK_COLS.map((c) => {
     const mark = c.key === rankSort.key ? (rankSort.dir === "asc" ? " ↑" : " ↓") : "";
-    return '<th data-key="' + c.key + '" class="sortable">' + c.label + mark + "</th>";
+    return '<th data-key="' + c.key + '" class="sortable' + (c.num ? " num-cell" : "") + '">' + c.label + mark + "</th>";
   }).join("");
   const body = sorted.map((row) => {
     const tds = RANK_COLS.map((c) => {
@@ -744,14 +772,16 @@ function drawRanking(rows) {
       if (c.key === "pace") {
         return '<td><span class="pill ' + (row.paceClass || "") + '">' + escapeHtml(row.paceLabel || "—") + "</span></td>";
       }
-      if (c.key === "planAdherencePct") return "<td>" + escapeHtml(row.planAdherenceLabel) + "</td>";
+      if (c.key === "planAdherencePct") return '<td class="num-cell">' + escapeHtml(row.planAdherenceLabel) + "</td>";
+      if (c.key === "totalKms") return '<td class="num-cell">' + escapeHtml(row.totalKmsLabel || "—") + "</td>";
+      if (c.key === "avgKmsPerVisitDay") return '<td class="num-cell">' + escapeHtml(row.avgKmsPerVisitDayLabel || "—") + "</td>";
       if (c.key === "townsNotVisited") {
         return "<td>" + escapeHtml(String(row.townsNotVisited ?? "—")) +
           (row.regionTownCount ? " / " + row.regionTownCount : "") + "</td>";
       }
       let val = row[c.key];
       if (val == null || val === "") val = "—";
-      return "<td>" + escapeHtml(val) + "</td>";
+      return "<td" + (c.num ? ' class="num-cell"' : "") + ">" + escapeHtml(val) + "</td>";
     }).join("");
     return '<tr class="rank-row" data-rm="' + escapeHtml(row.rmName) + '">' + tds + "</tr>";
   }).join("");
@@ -802,14 +832,16 @@ function drawMonthComparison(filtered) {
     { key: "holidayDays", label: "Holidays", invert: false },
     { key: "officeworkDays", label: "Office Work", invert: false },
     { key: "meetingDays", label: "Meetings", invert: false },
-    { key: "townsNotVisited", label: "Towns not visited", invert: true }
+    { key: "townsNotVisited", label: "Towns not visited", invert: true },
+    { key: "totalKms", label: "Total KMs", invert: false, kms: true }
   ];
   function findRm(list, name) {
     return (list || []).find((s) => s.rmName === name);
   }
-  function cell(val, pctMode) {
+  function cell(val, met) {
     if (val == null || val === "") return "—";
-    if (pctMode) return formatPct(val);
+    if (met && met.pct) return formatPct(val);
+    if (met && met.kms) return formatKms(val);
     return String(val);
   }
   function deltaHtml(curr, prev, invert) {
@@ -832,7 +864,7 @@ function drawMonthComparison(filtered) {
         const rec = findRm(byMonth[m], name);
         return rec ? rec[met.key] : null;
       });
-      const tds = vals.map((v) => "<td>" + escapeHtml(cell(v, met.pct)) + "</td>").join("");
+      const tds = vals.map((v) => "<td class=\"num-cell\">" + escapeHtml(cell(v, met)) + "</td>").join("");
       const prev = vals.length >= 2 ? vals[vals.length - 2] : null;
       const curr = vals[vals.length - 1];
       html += "<tr><td>" + escapeHtml(met.label) + "</td>" + tds + "<td>" + deltaHtml(curr, prev, met.invert) + "</td></tr>";
@@ -862,33 +894,48 @@ function drawDayDetail() {
     wrap.innerHTML = '<p class="empty">No days to show.</p>';
     return;
   }
-  meta.textContent = summary.rmName + " · Data up to " + (summary.dataUpTo || "—") +
+  meta.textContent = summary.rmName + " · Data up to " + (summary.dataUpTo ? formatDisplayDate(summary.dataUpTo) : "—") +
     " · " + summary.days.length + " date(s)";
   const rows = summary.days.map((d) => Object.assign({}, d, {
+    dateLabel: formatDisplayDate(d.dateISO),
     dailyProdHours: d.dailyProdHours == null ? "" : formatHours(d.dailyProdHours),
     dailyTripHours: d.dailyTripHours == null ? "" : formatHours(d.dailyTripHours),
     dailyTravelHours: d.dailyTravelHours == null ? "" : formatHours(d.dailyTravelHours),
+    dailyTotalHours: d.dailyTotalHours == null ? "" : formatHours(d.dailyTotalHours),
+    dailyKms: formatKms(d.dailyKms),
     baseTownDayLabel: d.isValidVisitDay ? (d.baseTownDay ? "Yes" : "No") : "—"
   }));
-  const head = DAY_COLS.map((c) => "<th>" + c.label + "</th>").join("");
+  const head = DAY_COLS.map((c) => "<th" + (c.num ? ' class="num-cell"' : "") + ">" + c.label + "</th>").join("");
   const body = rows.map((row) => {
     const tds = DAY_COLS.map((c) => {
-      const cls = c.key === "dayType" || c.key === "status" ? dayTypeClass(row.dayType) : "";
+      const classes = [];
+      if (c.key === "dayType" || c.key === "status") classes.push(dayTypeClass(row.dayType));
+      if (c.num) classes.push("num-cell");
+      if (c.key === "dailyTravelHours" && row.travelClamped) classes.push("hrs-flag");
       let val = row[c.key];
       if (val == null || val === "") val = "—";
-      return "<td" + (cls ? ' class="' + cls + '"' : "") + ">" + escapeHtml(val) + "</td>";
+      const title = (c.key === "dailyTravelHours" && row.travelClamped)
+        ? ' title="Productive hours exceeded the day span; travel shown as 0"'
+        : "";
+      return "<td" + (classes.length ? ' class="' + classes.join(" ") + '"' : "") + title + ">" + escapeHtml(val) + "</td>";
     }).join("");
-    return '<tr class="' + dayTypeClass(row.dayType) + '">' + tds + "</tr>";
+    return '<tr class="' + dayTypeClass(row.dayType) + (row.travelClamped ? " day-flagged" : "") + '">' + tds + "</tr>";
   }).join("");
   const totTrip = round2(summary.days.reduce((s, d) => s + (d.dailyTripHours || 0), 0));
   const totProd = round2(summary.days.reduce((s, d) => s + (d.dailyProdHours || 0), 0));
   const totTravel = round2(summary.days.reduce((s, d) => s + (d.dailyTravelHours || 0), 0));
+  const totHours = round2(summary.days.reduce((s, d) => s + (d.dailyTotalHours || 0), 0));
+  const kmsDays = summary.days.filter((d) => d.dailyKms != null);
+  const totKms = kmsDays.length ? kmsDays.reduce((s, d) => s + d.dailyKms, 0) : null;
   const footCells = DAY_COLS.map((c) => {
-    if (c.key === "dateISO") return "<td>Totals</td>";
+    const num = c.num ? ' class="num-cell"' : "";
+    if (c.key === "dateLabel") return "<td>Totals</td>";
     if (c.key === "status") return "<td>A " + summary.achieved + " · Inv " + summary.invalidDays + " · Miss " + summary.missingDays + "</td>";
-    if (c.key === "dailyTripHours") return "<td>" + formatHours(totTrip) + "</td>";
-    if (c.key === "dailyProdHours") return "<td>" + formatHours(totProd) + "</td>";
-    if (c.key === "dailyTravelHours") return "<td>" + formatHours(totTravel) + "</td>";
+    if (c.key === "dailyTripHours") return "<td" + num + ">" + formatHours(totTrip) + "</td>";
+    if (c.key === "dailyProdHours") return "<td" + num + ">" + formatHours(totProd) + "</td>";
+    if (c.key === "dailyTravelHours") return "<td" + num + ">" + formatHours(totTravel) + "</td>";
+    if (c.key === "dailyTotalHours") return "<td" + num + ">" + formatHours(totHours) + "</td>";
+    if (c.key === "dailyKms") return "<td" + num + ">" + formatKms(totKms) + "</td>";
     return "<td></td>";
   }).join("");
   wrap.innerHTML = '<table class="data rank-fit day-fit"><thead><tr>' + head +
@@ -919,7 +966,7 @@ function captureMeta() {
   const sel = document.getElementById("dash-month");
   const month = sel && sel.value ? monthPretty(sel.value) : "";
   const upto = dashCache.dataUpTo || "";
-  return (month || "rmVisits") + (upto ? " · Data up to " + formatDmy(upto) : "");
+  return (month || "rmVisits") + (upto ? " · Data up to " + formatDisplayDate(upto) : "");
 }
 
 function padCapturedCanvas(src, padCss, scale) {
@@ -1004,11 +1051,11 @@ async function copyCardImage(card, btn) {
   btn.textContent = "Copying…";
   const wraps = card.querySelectorAll(".table-wrap, .date-grid-scroll, .alert-list");
   wraps.forEach((w) => w.classList.add("capture-expand"));
-  const isRmCard = card.classList.contains("rm-report-card");
+  const skipBanner = card.classList.contains("rm-report-card") || card.classList.contains("alert-card");
   const title = card.getAttribute("data-copy-title") ||
     ((card.querySelector("h2") && card.querySelector("h2").textContent) || "rmVisits");
   let banner = null;
-  if (!isRmCard) {
+  if (!skipBanner) {
     banner = document.createElement("div");
     banner.className = "capture-banner";
     banner.innerHTML = "<strong>" + escapeHtml(title) + "</strong><span>" + escapeHtml(captureMeta()) + "</span>";
