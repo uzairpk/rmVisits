@@ -217,14 +217,30 @@ The header row may not be row 1 – detect the row that contains these headers. 
   - Bold Totals row: # = DISTINCT Counted Towns in the month; KMs and hours = sums.
 - Own Copy image button.
 
-### 5.5 Day Detail table (per selected RM – keep current table, add columns)
-Columns: Date, Day, Status (day label from 4.2), Towns, Trip Start, Trip End, Total Trip hrs, Prod Start, Prod End,
-Productive hrs, Travel hrs, Total hrs, KMs, Counted Towns, Day Type (Valid/Invalid + reason, or Leave/Holiday/…),
-Base Town (Base-only / Base + Other / No), Plan Deviation (planned town if different), Remarks.
-- Towns column shows each town with its hours; counted towns (≥ 2 hrs) in green, towns under 2 hrs in soft red.
+### 5.5 Day Detail table (per selected RM – compact, no duplicate columns)
+Columns (in this order):
+| Column | Content |
+|---|---|
+| Date | "01-Oct Thu" (no separate Day column) |
+| Status | Valid / Invalid · reason ("Total < 5 hrs", "No town ≥ 2 hrs") / Leave / Holiday / Meeting / Office Work / Transit / No entry |
+| Towns | each town with its productive hrs; counted towns (≥ 2 hrs) green, under 2 hrs soft red; base towns marked "B" |
+| Trip | "12:13–17:05" (first start – last end of the day) |
+| Prod | "12:41–16:11" (first prod start – last prod end) |
+| Prod hrs | daily productive hrs |
+| Travel hrs | daily travel hrs |
+| Total hrs | daily total hrs – coloured green (valid) / red (invalid) |
+| # | counted towns that day |
+| KMs | daily KMs – hide the whole column if the month has no KMs data |
+| Base | "Base-only" or "Base + Other"; blank otherwise |
+| Plan Dev. | planned town if different from actual; blank otherwise |
+| Remarks | remarks |
+- No Day column, no separate Day Type column, no Trip hrs column (same as Total hrs).
+- Non-visit rows (Meeting, Holiday, Leave, Office Work, Transit, No entry): show only Date, Status and Remarks;
+  all other cells empty (no "—" everywhere). Use a lighter row style.
 - Show EVERY date of the month up to Data Up To, including Missing days as "No entry" rows.
-- Multi-town days: one row per day; towns comma-separated; times = first start / last end; hours = sums.
-- Totals row at the bottom.
+- One line per row; only Towns and Remarks may wrap. Header labels on one line.
+- Comfortable spacing: row padding ~10px, columns sized to content, Towns and Remarks get the remaining width.
+- Totals row: Status = "Valid 7 · Invalid 6 · Missing 0"; Prod, Travel, Total hrs and KMs = sums; # = distinct counted towns.
 
 ### 5.6 Month Comparison table (separate block)
 - Rows = RMs, grouped by metric OR per-RM mini table – columns = last 3 uploaded months (e.g. Aug | Sep | Oct).

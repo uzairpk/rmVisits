@@ -508,7 +508,8 @@ td.type-invalid { color: var(--danger); font-weight: 700; }
   height: auto !important;
 }
 .capturing { overflow: visible !important; }
-.capturing .rm-days td { overflow: visible; }
+.capturing .rm-days td,
+.capturing table.day-detail td { overflow: visible; }
 .copy-stage {
   position: fixed;
   left: 0;
@@ -701,6 +702,52 @@ tr.day-flagged { outline: 1px solid rgba(251, 191, 36, 0.35); }
 #card-days.flash {
   box-shadow: 0 0 0 1px var(--accent), 0 18px 50px rgba(0, 0, 0, 0.35);
 }
+#table-days.table-wrap-fit { overflow-x: auto; }
+table.day-detail {
+  width: 100%;
+  table-layout: auto;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+table.day-detail th,
+table.day-detail td {
+  text-align: left;
+  padding: 10px 8px;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: unset;
+  border-bottom: 1px solid var(--line);
+}
+table.day-detail th {
+  position: sticky;
+  top: 0;
+  background: #121a28;
+  color: var(--muted);
+  font-weight: 650;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+table.day-detail th.num-cell,
+table.day-detail td.num-cell { text-align: right; }
+table.day-detail td.day-col-towns,
+table.day-detail th.day-col-towns,
+table.day-detail td.day-col-remarks,
+table.day-detail th.day-col-remarks {
+  white-space: normal;
+  word-break: break-word;
+}
+table.day-detail td.day-col-towns { min-width: 148px; }
+table.day-detail td.day-col-remarks { min-width: 110px; }
+table.day-detail tr.day-quiet { color: var(--muted); background: rgba(148, 163, 184, 0.045); }
+table.day-detail tr.day-quiet td { font-weight: 400; }
+table.day-detail td.hrs-green { color: #34d399; font-weight: 700; }
+table.day-detail td.hrs-red { color: #f87171; font-weight: 700; }
+table.day-detail tbody tr:hover { background: rgba(255,255,255,0.03); }
+table.day-detail tfoot .totals-row td { font-weight: 750; background: #121a28; }
+.capturing table.day-detail { width: max-content; min-width: 100%; }
+.copy-stage #card-days { width: max-content; max-width: none; }
 
 @media (max-width: 1100px) {
   .alert-grid { grid-template-columns: 1fr; }

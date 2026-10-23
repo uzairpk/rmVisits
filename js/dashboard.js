@@ -12,26 +12,26 @@ const COLOR = {
   text: "#8b9bb4"
 };
 
-const DAY_COLS = [
-  { key: "dateLabel", label: "Date" },
-  { key: "dayName", label: "Day" },
-  { key: "status", label: "Status" },
-  { key: "towns", label: "Towns" },
-  { key: "tripStartLabel", label: "Trip start" },
-  { key: "tripEndLabel", label: "Trip end" },
-  { key: "dailyTripHours", label: "Trip hrs", num: true },
-  { key: "prodStartLabel", label: "Prod start" },
-  { key: "prodEndLabel", label: "Prod end" },
-  { key: "dailyProdHours", label: "Prod hrs", num: true },
-  { key: "dailyTravelHours", label: "Travel hrs", num: true },
-  { key: "dailyTotalHours", label: "Total hrs", num: true },
-  { key: "dailyKms", label: "KMs", num: true },
-  { key: "townCount", label: "Counted towns", num: true },
-  { key: "dayTypeLabel", label: "Day type" },
-  { key: "baseTownKind", label: "Base town" },
-  { key: "planDeviationText", label: "Plan deviation" },
-  { key: "remarks", label: "Remarks" }
-];
+function dayDetailCols(showKms) {
+  const cols = [
+    { key: "dateLabel", label: "Date", cls: "day-col-date" },
+    { key: "statusLabel", label: "Status", cls: "day-col-status" },
+    { key: "towns", label: "Towns", cls: "day-col-towns wrap" },
+    { key: "tripRange", label: "Trip", cls: "day-col-range" },
+    { key: "prodRange", label: "Prod", cls: "day-col-range" },
+    { key: "prodHours", label: "Prod hrs", num: true },
+    { key: "travelHours", label: "Travel hrs", num: true },
+    { key: "totalHours", label: "Total hrs", num: true },
+    { key: "townCount", label: "#", num: true }
+  ];
+  if (showKms) cols.push({ key: "kms", label: "KMs", num: true });
+  cols.push(
+    { key: "baseLabel", label: "Base", cls: "day-col-base" },
+    { key: "planDev", label: "Plan Dev.", cls: "day-col-plan" },
+    { key: "remarks", label: "Remarks", cls: "day-col-remarks wrap" }
+  );
+  return cols;
+}
 
 const RANK_COLS = [
   { key: "rmName", label: "RM" },
@@ -120,6 +120,28 @@ function dayTypeClass(type) {
   if (type === "Invalid") return "type-invalid";
   if (type === "No entry" || type === "Missing") return "type-missing";
   return "";
+}
+
+function timeRangeLabel(start, end) {
+  if (start && end) return start + "–" + end;
+  return start || end || "";
+}
+
+function dayStatusLabel(d) {
+  if (d.isInvalid) {
+    const reason = String(d.invalidReason || "").replace(/Total under /g, "Total < ");
+    return reason ? "Invalid · " + reason : "Invalid";
+  }
+  return d.dayType || "No entry";
+}
+
+function dayBaseLabel(d) {
+  if (d.baseTownKind === "Base-only" || d.baseTownKind === "Base + Other") return d.baseTownKind;
+  return "";
+}
+
+function monthHasKmsData(summaries) {
+  return (summaries || []).some((s) => (s.days || []).some((d) => d.dailyKms != null));
 }
 
 function formatDayVal(val) {
@@ -959,53 +981,70 @@ function drawDayDetail() {
   }
   meta.textContent = summary.rmName + " · Data up to " + (summary.dataUpTo ? formatDisplayDate(summary.dataUpTo) : "—") +
     " · " + summary.days.length + " date(s)";
-  const rows = summary.days.map((d) => Object.assign({}, d, {
-    dateLabel: formatDisplayDate(d.dateISO),
-    dailyProdHours: d.dailyProdHours == null ? "" : formatHours(d.dailyProdHours),
-    dailyTripHours: d.dailyTripHours == null ? "" : formatHours(d.dailyTripHours),
-    dailyTravelHours: d.dailyTravelHours == null ? "" : formatHours(d.dailyTravelHours),
-    dailyTotalHours: d.dailyTotalHours == null ? "" : formatHours(d.dailyTotalHours),
-    dailyKms: formatKms(d.dailyKms),
-    dayTypeLabel: d.isInvalid && d.invalidReason ? (d.dayType + " · " + d.invalidReason) : d.dayType,
-    baseTownKind: d.baseTownKind || "—"
-  }));
-  const head = DAY_COLS.map((c) => "<th" + (c.num ? ' class="num-cell"' : "") + ">" + c.label + "</th>").join("");
-  const body = rows.map((row) => {
-    const tds = DAY_COLS.map((c) => {
-      const classes = [];
-      if (c.key === "dayType" || c.key === "status") classes.push(dayTypeClass(row.dayType));
+  const showKms = monthHasKmsData(dashCache.summaries);
+  const cols = dayDetailCols(showKms);
+  const head = cols.map((c) => {
+    const classes = [c.cls || "", c.num ? "num-cell" : ""].filter(Boolean).join(" ");
+    return "<th" + (classes ? ' class="' + classes + '"' : "") + ">" + c.label + "</th>";
+  }).join("");
+  const body = summary.days.map((d) => {
+    const visit = !!(d.isFieldDay || d.isValid || d.isInvalid);
+    if (!visit) {
+      return '<tr class="day-quiet"><td class="day-col-date">' + escapeHtml(formatDisplayDate(d.dateISO)) +
+        '</td><td class="day-col-status">' + escapeHtml(dayStatusLabel(d)) +
+        '</td><td class="day-col-remarks wrap" colspan="' + (cols.length - 2) + '">' +
+        escapeHtml(d.remarks || "") + "</td></tr>";
+    }
+    const view = {
+      dateLabel: formatDisplayDate(d.dateISO),
+      statusLabel: dayStatusLabel(d),
+      towns: townHoursHtml(d.townHours, summary.baseTowns),
+      tripRange: timeRangeLabel(d.tripStartLabel, d.tripEndLabel),
+      prodRange: timeRangeLabel(d.prodStartLabel, d.prodEndLabel),
+      prodHours: d.dailyProdHours != null ? formatHours(d.dailyProdHours) : "",
+      travelHours: d.dailyTravelHours != null ? formatHours(d.dailyTravelHours) : "",
+      totalHours: d.dailyTotalHours != null ? formatHours(d.dailyTotalHours) : "",
+      townCount: String(d.townCount || 0),
+      kms: d.dailyKms != null ? formatKms(d.dailyKms) : "",
+      baseLabel: dayBaseLabel(d),
+      planDev: d.planDeviationText || "",
+      remarks: d.remarks || ""
+    };
+    const tds = cols.map((c) => {
+      const classes = [c.cls || ""];
       if (c.num) classes.push("num-cell");
-      if (c.key === "dailyTravelHours" && row.travelClamped) classes.push("hrs-flag");
-      if (c.key === "towns") {
-        return "<td>" + townHoursHtml(row.townHours, summary.baseTowns) + "</td>";
-      }
-      let val = row[c.key];
-      if (val == null || val === "") val = "—";
-      const title = (c.key === "dailyTravelHours" && row.travelClamped)
+      if (c.key === "statusLabel") classes.push(dayTypeClass(d.dayType));
+      if (c.key === "totalHours") classes.push(d.isValid ? "hrs-green" : "hrs-red");
+      if (c.key === "travelHours" && d.travelClamped) classes.push("hrs-flag");
+      const title = (c.key === "travelHours" && d.travelClamped)
         ? ' title="Productive hours exceeded the day span; travel shown as 0"'
         : "";
-      return "<td" + (classes.length ? ' class="' + classes.join(" ") + '"' : "") + title + ">" + escapeHtml(val) + "</td>";
+      const html = c.key === "towns" ? (view.towns || "") : escapeHtml(view[c.key] || "");
+      return "<td class=\"" + classes.filter(Boolean).join(" ") + "\"" + title + ">" + html + "</td>";
     }).join("");
-    return '<tr class="' + dayTypeClass(row.dayType) + (row.travelClamped ? " day-flagged" : "") + '">' + tds + "</tr>";
+    return '<tr class="' + dayTypeClass(d.dayType) + (d.travelClamped ? " day-flagged" : "") + '">' + tds + "</tr>";
   }).join("");
-  const totTrip = round2(summary.days.reduce((s, d) => s + (d.dailyTripHours || 0), 0));
   const totProd = round2(summary.days.reduce((s, d) => s + (d.dailyProdHours || 0), 0));
   const totTravel = round2(summary.days.reduce((s, d) => s + (d.dailyTravelHours || 0), 0));
   const totHours = round2(summary.days.reduce((s, d) => s + (d.dailyTotalHours || 0), 0));
   const kmsDays = summary.days.filter((d) => d.dailyKms != null);
   const totKms = kmsDays.length ? kmsDays.reduce((s, d) => s + d.dailyKms, 0) : null;
-  const footCells = DAY_COLS.map((c) => {
-    const num = c.num ? ' class="num-cell"' : "";
-    if (c.key === "dateLabel") return "<td>Totals</td>";
-    if (c.key === "status") return "<td>A " + summary.achieved + " · Inv " + summary.invalidDays + " · Miss " + summary.missingDays + "</td>";
-    if (c.key === "dailyTripHours") return "<td" + num + ">" + formatHours(totTrip) + "</td>";
-    if (c.key === "dailyProdHours") return "<td" + num + ">" + formatHours(totProd) + "</td>";
-    if (c.key === "dailyTravelHours") return "<td" + num + ">" + formatHours(totTravel) + "</td>";
-    if (c.key === "dailyTotalHours") return "<td" + num + ">" + formatHours(totHours) + "</td>";
-    if (c.key === "dailyKms") return "<td" + num + ">" + formatKms(totKms) + "</td>";
-    return "<td></td>";
+  const footCells = cols.map((c) => {
+    const cls = (c.cls || "") + (c.num ? " num-cell" : "");
+    const td = (val) => "<td class=\"" + cls.trim() + "\">" + val + "</td>";
+    if (c.key === "dateLabel") return td("Totals");
+    if (c.key === "statusLabel") {
+      return td("Valid " + summary.validDays + " · Invalid " + summary.invalidDays +
+        " · Missing " + summary.missingDays);
+    }
+    if (c.key === "prodHours") return td(formatHours(totProd));
+    if (c.key === "travelHours") return td(formatHours(totTravel));
+    if (c.key === "totalHours") return td(formatHours(totHours));
+    if (c.key === "kms") return td(formatKms(totKms));
+    if (c.key === "townCount") return td(String(summary.uniqueTownsVisited || 0));
+    return td("");
   }).join("");
-  wrap.innerHTML = '<table class="data rank-fit day-fit"><thead><tr>' + head +
+  wrap.innerHTML = '<table class="day-detail"><thead><tr>' + head +
     "</tr></thead><tbody>" + body + "</tbody><tfoot><tr class=\"totals-row\">" + footCells + "</tr></tfoot></table>";
 }
 
