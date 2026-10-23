@@ -7,7 +7,7 @@ var SOP = {
   officeWork: 4,
   plannedLeaves: 1,
   minTownHrs: 2,
-  minDayHrs: 5,
+  minDayTotalHrs: 5, /* earliest-to-latest total hours that day, including travel */
   maxBaseOnlyDays: 4,
   townCoverageMonths: 6
 };
@@ -486,10 +486,12 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
   var dailyKms = sumKms(rows);
   var reasons = [];
   if (isFieldDay) {
-    if ((dailyProd || 0) < SOP.minDayHrs) reasons.push("Under " + SOP.minDayHrs + " hrs");
+    if (dailyTotal == null || dailyTotal < SOP.minDayTotalHrs) {
+      reasons.push("Total under " + SOP.minDayTotalHrs + " hrs");
+    }
     if (!counted.length) reasons.push("No town ≥ " + SOP.minTownHrs + " hrs");
   }
-  var valid = isFieldDay && (dailyProd || 0) >= SOP.minDayHrs && counted.length > 0;
+  var valid = isFieldDay && dailyTotal != null && dailyTotal >= SOP.minDayTotalHrs && counted.length > 0;
   var type = isFieldDay ? (valid ? "Valid" : "Invalid") : nonVisitDayLabel(rows);
   var baseTowns = parseBaseTowns(rmInfo && rmInfo.baseTown, territoryRows);
   var countedHasBase = counted.some(function (t) { return isBaseTownName(t.name, baseTowns); });

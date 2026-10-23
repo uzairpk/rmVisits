@@ -301,8 +301,8 @@ function drawKpis(rows) {
   const barCls = achievementClass(pctVal);
   const items = [
     kpiHtml("Achieved vs adj. target", (achieved + " / " + adj), formatPct(pctVal) + " · exp. " + expected, barCls, pctVal),
-    kpiHtml("Valid days", String(valid), "≥ " + SOP.minDayHrs + " hrs and a town ≥ " + SOP.minTownHrs + " hrs"),
-    kpiHtml("Invalid days", String(sum(rows, "invalidDays")), "Under " + SOP.minDayHrs + " hrs and/or no town ≥ " + SOP.minTownHrs, "kpi-bad"),
+    kpiHtml("Valid days", String(valid), "≥ " + SOP.minDayTotalHrs + " total hrs and a town ≥ " + SOP.minTownHrs + " prod hrs"),
+    kpiHtml("Invalid days", String(sum(rows, "invalidDays")), "Total under " + SOP.minDayTotalHrs + " hrs and/or no town ≥ " + SOP.minTownHrs, "kpi-bad"),
     kpiHtml("Total visits", String(visits), "Counted towns across days"),
     kpiHtml("Other TTY days", String(sum(rows, "otherTtyDays")), "Valid days with a non-base counted town"),
     kpiHtml("Base-only counted", String(sum(rows, "baseOnlyCounted")), "Cap " + SOP.maxBaseOnlyDays + " toward target"),
@@ -356,7 +356,7 @@ function drawAlerts(rows, pack) {
         dayName: d.dayName,
         towns: d.towns || "—",
         prod: formatHours(d.dailyProdHours),
-        travel: formatHours(d.dailyTravelHours),
+        total: formatHours(d.dailyTotalHours),
         reason: d.invalidReason || "",
         remarks: d.remarks || ""
       });
@@ -400,7 +400,7 @@ function drawAlerts(rows, pack) {
       missing.length ? missing.map((m) => alertLine(m.rmName, formatDisplayDate(m.dateISO), "", m.rmName)).join("") : '<p class="empty">None in this view.</p>') +
     alertCard("Invalid days", invalid.length,
       invalid.length ? invalid.map((m) => {
-        const sub = formatDisplayDate(m.dateISO) + " · " + m.towns + " · " + m.prod + " hrs productive · " + m.travel + " hrs travel";
+        const sub = formatDisplayDate(m.dateISO) + " · " + m.towns + " · " + m.prod + " hrs productive · " + m.total + " hrs total";
         return alertLine(m.rmName, sub, [m.reason, m.remarks].filter(Boolean).join("\n"), m.rmName);
       }).join("") : '<p class="empty">None in this view.</p>') +
     alertCard("Base-only days over " + SOP.maxBaseOnlyDays, overBase.length,
@@ -474,7 +474,7 @@ function rmClickPlugin() {
 }
 
 function refHourLines(marks) {
-  const lines = marks || [[SOP.minDayHrs, COLOR.green, SOP.minDayHrs + "h"]];
+  const lines = marks || [[SOP.maxBaseOnlyDays, COLOR.amber, SOP.maxBaseOnlyDays + ""]];
   return {
     id: "refHourLines-" + lines.map((m) => m[0]).join("-"),
     afterDatasetsDraw: function (chart) {
@@ -607,8 +607,7 @@ function drawCharts(rows, pack) {
         x: { beginAtZero: true, suggestedMax: 8, grid: { color: COLOR.grid }, ticks: { color: COLOR.text } },
         y: { grid: { display: false }, ticks: { color: COLOR.text } }
       }
-    }), rmClickPlugin()),
-    plugins: [refHourLines([[SOP.minDayHrs, COLOR.green, SOP.minDayHrs + "h"]])]
+    }), rmClickPlugin())
   });
 
   drawTrend3(ranked);
@@ -763,15 +762,15 @@ function drawRmCards(rows, pack) {
     const totTravel = round2(visitDays.reduce((n, d) => n + (d.dailyTravelHours || 0), 0));
     const totHours = round2(visitDays.reduce((n, d) => n + (d.dailyTotalHours || 0), 0));
     const dayRows = visitDays.map((d) => {
-      const tone = d.isValid ? "hrs-green" : "hrs-red";
+      const totalTone = d.isValid ? "hrs-green" : "hrs-red";
       const travelCls = d.travelClamped ? "hrs-flag" : "";
       return "<tr><td class=\"rm-day-date\">" + escapeHtml(formatDisplayDate(d.dateISO)) +
         "</td><td class=\"rm-day-towns\">" + townHoursHtml(d.townHours, s.baseTowns) + "</td>" +
         numCell("", d.townCount) +
         numCell("", formatKms(d.dailyKms)) +
-        numCell(tone, formatHours(d.dailyProdHours)) +
+        numCell("", formatHours(d.dailyProdHours)) +
         numCell(travelCls, formatHours(d.dailyTravelHours), d.travelClamped ? "Productive hours exceeded the day span; travel shown as 0" : "") +
-        numCell("", formatHours(d.dailyTotalHours)) + "</tr>";
+        numCell(totalTone, formatHours(d.dailyTotalHours)) + "</tr>";
     }).join("");
     const foot = visitDays.length
       ? "<tfoot><tr class=\"rm-day-totals\"><td>Totals</td><td></td>" +

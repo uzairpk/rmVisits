@@ -69,7 +69,7 @@ The header row may not be row 1 – detect the row that contains these headers. 
 - Market visit days: **18** (default target; actual target comes from RM master)
 - Meetings: **3** · Planning / Office Work: **4** · Leaves: **1**
 - Minimum productive hours **per town**: **2**
-- Minimum productive hours **per day**: **5**
+- Minimum **total** hours **per day** (first start to last end, incl. travel): **5**
 - Maximum **base-only days** counted toward target: **4**
 - All territories of the region must be visited **once a month**
 - All towns of the region must be visited **once in 6 months**
@@ -90,16 +90,19 @@ The header row may not be row 1 – detect the row that contains these headers. 
 
 **Day level:**
 - **Daily Productive Time** = sum of Town Productive Hrs of ALL towns that day (including towns under 2 hrs)
-- **Valid Day** = Daily Productive Time ≥ 5 hrs AND at least one Counted Town
+- **Daily Total Hrs** = from the EARLIEST to the LATEST time that day (see "Time and distance" below), incl. travel
+- **Valid Day** = Daily Total Hrs ≥ 5 AND at least one Counted Town (town with ≥ 2 PRODUCTIVE hrs)
 - **Invalid Day** = a Market Visit day that is not valid. Reason shown:
-  "Under 5 hrs" and/or "No town ≥ 2 hrs"
+  "Total under 5 hrs" and/or "No town ≥ 2 hrs"
+- The 2 hrs per town rule is always on PRODUCTIVE time; the 5 hrs per day rule is on TOTAL time.
 - Examples:
-  | Towns (hrs) | Daily total | Counted towns | Result |
+  | Town productive hrs | Daily total hrs (incl. travel) | Counted towns | Result |
   |---|---|---|---|
-  | 2, 2, 1 | 5 | 2 | Valid |
-  | 2, 3, 1 | 6 | 2 | Valid |
-  | 2, 1, 1 | 4 | 1 | Invalid (under 5) |
-  | 1.5, 1.5, 1.5, 1.5 | 6 | 0 | Invalid (no town ≥ 2) |
+  | 3.6 | 6.1 | 1 | Valid |
+  | 3.2, 1.8 | 6.4 | 1 | Valid |
+  | 3.0 | 4.5 | 1 | Invalid (total under 5) |
+  | 1.4, 1.3 | 3.8 | 0 | Invalid (no town ≥ 2, total under 5) |
+  | 1.5, 1.5, 1.5, 1.5 | 7.0 | 0 | Invalid (no town ≥ 2) |
 - No more Green / Red. Only **Valid** / **Invalid**.
 
 **Base town:**
@@ -180,7 +183,7 @@ The header row may not be row 1 – detect the row that contains these headers. 
    (Valid, Invalid, Leave, Holiday, Meeting, Office Work, Transit, Missing, future = empty). Legend underneath.
    Hover shows towns and productive hours.
 4. **Base-only (counted / not counted) vs Other TTY days by RM** – stacked horizontal bar, with a line at 4
-5. **Average productive hrs per valid day by RM** – bar with a reference line at 5 hrs
+5. **Average productive hrs per valid day by RM** – bar, no reference line (5 hrs now applies to total time)
 6. **3-month Achievement % trend by RM** – line chart; only shown when 2+ months are uploaded
 - Remove all other charts (daily trend, productive vs travel, day type mix, town coverage by region).
 
@@ -205,9 +208,11 @@ The header row may not be row 1 – detect the row that contains these headers. 
 - Day table (Market Visit days only – Valid / Invalid):
   Date | Towns | # | KMs | Prod | Travel | Total   (short headers on ONE line; no note under the table)
   - Towns: show each town with its hours, e.g. "FSD-3 (2.5), Chiniot (3.0), Dijkot (1.0)".
-    Counted towns (>= 2 hrs) in green, towns under 2 hrs in soft red. Base towns marked with a small "B".
+    Counted towns (≥ 2 productive hrs): name and hours in GREEN.
+    Towns under 2 hrs (not counted): name and hours in SOFT RED (easy to read on dark background).
+    Base towns marked with a small "B".
   - # = Counted Towns that day.
-  - Prod coloured green if the day is Valid, red if Invalid.
+  - TOTAL coloured green if the day is Valid, red if Invalid (TOTAL decides validity). PROD and TRAVEL plain.
   - Headers and numbers never wrap; only Towns may wrap and gets the remaining width.
   - Bold Totals row: # = DISTINCT Counted Towns in the month; KMs and hours = sums.
 - Own Copy image button.
@@ -216,7 +221,7 @@ The header row may not be row 1 – detect the row that contains these headers. 
 Columns: Date, Day, Status (day label from 4.2), Towns, Trip Start, Trip End, Total Trip hrs, Prod Start, Prod End,
 Productive hrs, Travel hrs, Total hrs, KMs, Counted Towns, Day Type (Valid/Invalid + reason, or Leave/Holiday/…),
 Base Town (Base-only / Base + Other / No), Plan Deviation (planned town if different), Remarks.
-- Towns column shows each town with its hours; counted towns (>= 2 hrs) in green, towns under 2 hrs in soft red.
+- Towns column shows each town with its hours; counted towns (≥ 2 hrs) in green, towns under 2 hrs in soft red.
 - Show EVERY date of the month up to Data Up To, including Missing days as "No entry" rows.
 - Multi-town days: one row per day; towns comma-separated; times = first start / last end; hours = sums.
 - Totals row at the bottom.
@@ -230,8 +235,8 @@ Base Town (Base-only / Base + Other / No), Plan Deviation (planned town if diffe
 ### 5.7 Alerts panel
 - One title per panel with count badge, month and "Data up to" date (no duplicate titles).
 - **Missing days**: only up to Data Up To, never up to today.
-- **Invalid days**: each line = RM name, then "12-Oct Mon · Towns (hrs each) · 4.2 hrs productive · 3.1 hrs travel",
-  the reason ("Under 5 hrs" / "No town ≥ 2 hrs"), and Remarks in italics underneath if any.
+- **Invalid days**: each line = RM name, then "12-Oct Mon · Towns (hrs each) · 2.66 hrs productive · 3.83 hrs total",
+  the reason ("Total under 5 hrs" / "No town ≥ 2 hrs"), and Remarks in italics underneath if any.
 - **Base-only days over 4**: RM, count, dates not counted.
 - **Territories not visited this month**: RM and territory names.
 - **Over SOP**: RMs with Meetings > 3, Office Work > 4 or Leaves > 1.
