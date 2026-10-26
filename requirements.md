@@ -335,6 +335,36 @@ Each line:
   "Clear exported rows" button (with confirm).
 - Instruction on the page: "Paste into the master log using Paste Special → Values (Ctrl+Alt+V, V)".
 
+### 5.10 SOP & Rules page (new sidebar item "SOP & Rules", read-only)
+Purpose: show everyone exactly which SOP rules the app applies and how every number is calculated.
+
+**Single source of truth**
+- All numbers on this page are read from the SAME SOP constants used by js/calculations.js (section 4.0).
+  Never type rule values as fixed text on this page. If a constant changes, this page changes automatically.
+- Read-only: no editing of rules on screen.
+
+**Sections (each a card with its own Copy image button)**
+1. **Source**: "Based on SOPs of Monthly Market Visits for RMs/SAM – Sep 2026" + app version/date.
+2. **SOP benchmarks** table: Working days 26 · Market visit days 18 · Meetings 3 · Planning/Office Work 4 · Leaves 1 ·
+   Min productive hrs per town 2 · Min total hrs per day 5 · Max base-only days counted 4 ·
+   All territories once a month · All towns once in 6 months.
+3. **How a day is judged** – step-by-step flow:
+   Market Visit day? → which towns have ≥ 2 productive hrs (Counted Towns) → at least one? → day total hrs
+   (first start to last end, incl. travel) ≥ 5? → Valid / Invalid (with reason).
+   Worked examples table (same as section 4.2).
+4. **Day types and priority**: Valid/Invalid, Leave, Holiday, Meeting, Office Work, Transit, Missing – and that a day
+   is counted once only (mixed days = market visit day).
+5. **Monthly formulas** with examples:
+   - Adjusted Target (leave rule + table for 0, 1, 2, 3, 5, 10 leaves)
+   - Base-only days counted = min(base-only days, 4)
+   - Achieved = Outside Base Days + Base-only Days Counted
+   - Achievement %, Expected by Now, Pace and its colours
+6. **Coverage rules**: Territories Not Visited (month), Towns Not Visited (6M), Towns Repeated from last month.
+7. **Glossary**: Counted Town, Outside Base Day, Base-only Day, Base Town Visit, Invalid Day, Missing Day,
+   Data Up To, Plan Deviation, Productive / Travel / Total hrs, KMs.
+
+**Design**: same dark theme, cards width ~800px, easy to read, examples in small tables, valid in green / invalid in red.
+
 ### 5.9 Open questions
 - Half-day leave (e.g. market visit in the morning, leave in the afternoon): not handled yet – to be decided.
 
@@ -358,7 +388,7 @@ Each line:
 - "Clear all data" button in settings.
 - Keep code simple and readable, split into a few files: `index.html`, `css/style.css`, `js/upload.js`,
   `js/calculations.js`, `js/dashboard.js`, `js/reports.js`.
-- Single-page app with a left sidebar: Dashboard, Data Entry, Uploads, Master Data, Reports.
+- Single-page app with a left sidebar: Dashboard, Data Entry, Uploads, Master Data, Reports, SOP & Rules.
 
 ### Sharing
 - Option A: zip the folder and send it. Colleague unzips and opens `index.html`.

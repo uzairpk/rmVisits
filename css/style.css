@@ -952,3 +952,32 @@ table.entry-days .num-cell { text-align: right; }
   .entry-top { grid-template-columns: 1fr 1fr; }
   .entry-line, .entry-line.not-visit { grid-template-columns: 1fr 1fr; }
 }
+
+.sop-wrap {
+  max-width: 800px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sop-card p { margin: 0 0 10px; line-height: 1.5; }
+.sop-card p:last-child { margin-bottom: 0; }
+.sop-flow {
+  margin: 0 0 12px;
+  padding-left: 1.2em;
+  line-height: 1.55;
+}
+.sop-flow li { margin-bottom: 6px; }
+.sop-list {
+  margin: 0 0 12px;
+  padding-left: 1.2em;
+  line-height: 1.55;
+}
+.sop-list li { margin-bottom: 8px; }
+.sop-table { margin: 8px 0 4px; }
+.sop-ok { color: #34d399; font-weight: 700; }
+.sop-bad { color: #f87171; font-weight: 700; }
+.sop-warn { color: var(--warn); font-weight: 700; }
+.sop-glossary { margin: 0; }
+.sop-glossary dt { font-weight: 700; margin-top: 10px; }
+.sop-glossary dt:first-child { margin-top: 0; }
+.sop-glossary dd { margin: 4px 0 0; color: var(--muted); line-height: 1.45; }

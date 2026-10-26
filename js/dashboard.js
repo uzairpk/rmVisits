@@ -1097,8 +1097,12 @@ function padCapturedCanvas(src, padCss, scale) {
   return out;
 }
 
-function wireCopyButtons() {
-  document.querySelectorAll("#dash-body .card").forEach((card) => {
+function wireCopyButtons(root) {
+  const scope = typeof root === "string"
+    ? document.querySelector(root)
+    : (root || document.getElementById("dash-body"));
+  if (!scope) return;
+  scope.querySelectorAll(".card").forEach((card) => {
     if (card.querySelector(".copy-img-btn")) return;
     card.classList.add("has-copy");
     const btn = document.createElement("button");
@@ -1170,11 +1174,14 @@ async function copyCardImage(card, btn) {
   const skipBanner = card.classList.contains("rm-report-card") || card.classList.contains("alert-card");
   const title = card.getAttribute("data-copy-title") ||
     ((card.querySelector("h2") && card.querySelector("h2").textContent) || "rmVisits");
+  const meta = card.closest("#page-sop")
+    ? (SOP.appVersion + " · " + SOP.asOf)
+    : captureMeta();
   let banner = null;
   if (!skipBanner) {
     banner = document.createElement("div");
     banner.className = "capture-banner";
-    banner.innerHTML = "<strong>" + escapeHtml(title) + "</strong><span>" + escapeHtml(captureMeta()) + "</span>";
+    banner.innerHTML = "<strong>" + escapeHtml(title) + "</strong><span>" + escapeHtml(meta) + "</span>";
     card.insertBefore(banner, card.firstChild);
   }
   card.classList.add("capturing");

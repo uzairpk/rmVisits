@@ -9,7 +9,13 @@ var SOP = {
   minTownHrs: 2,
   minDayTotalHrs: 5, /* earliest-to-latest total hours that day, including travel */
   maxBaseOnlyDays: 4,
-  townCoverageMonths: 6
+  townCoverageMonths: 6,
+  territoryCoverageMonths: 1,
+  paceOnTrackMin: 0,
+  paceSlightMin: -2,
+  sourceDoc: "SOPs of Monthly Market Visits for RMs/SAM – Sep 2026",
+  appVersion: "v22",
+  asOf: "Oct 2026"
 };
 
 var STATUS_VISIT = "marketvisit";
@@ -307,9 +313,28 @@ function paceFrom(achieved, expected) {
     return { pace: null, paceLabel: "—", paceClass: "" };
   }
   var diff = achieved - expected;
-  if (diff >= 0) return { pace: diff, paceLabel: "On track (" + (diff > 0 ? "+" : "") + diff + ")", paceClass: "ach-green" };
-  if (diff >= -2) return { pace: diff, paceLabel: "Slightly behind (" + diff + ")", paceClass: "ach-amber" };
+  if (diff >= SOP.paceOnTrackMin) {
+    return { pace: diff, paceLabel: "On track (" + (diff > 0 ? "+" : "") + diff + ")", paceClass: "ach-green" };
+  }
+  if (diff >= SOP.paceSlightMin) {
+    return { pace: diff, paceLabel: "Slightly behind (" + diff + ")", paceClass: "ach-amber" };
+  }
   return { pace: diff, paceLabel: "Behind (" + diff + ")", paceClass: "ach-red" };
+}
+
+function judgeTownHours(hoursList, dailyTotal) {
+  var hours = hoursList || [];
+  var counted = hours.filter(function (h) { return h >= SOP.minTownHrs; }).length;
+  var reasons = [];
+  if (dailyTotal == null || dailyTotal < SOP.minDayTotalHrs) {
+    reasons.push("Total under " + SOP.minDayTotalHrs + " hrs");
+  }
+  if (!counted) reasons.push("No town ≥ " + SOP.minTownHrs + " hrs");
+  return {
+    counted: counted,
+    isValid: dailyTotal != null && dailyTotal >= SOP.minDayTotalHrs && counted > 0,
+    reasons: reasons
+  };
 }
 
 /* Section 4.1 – per row. File time totals are ignored; we recompute. */

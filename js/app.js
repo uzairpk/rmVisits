@@ -1,4 +1,4 @@
-const pages = ["dashboard", "entry", "uploads", "master", "reports"];
+const pages = ["dashboard", "entry", "uploads", "master", "reports", "sop"];
 
 function showToast(message, isError) {
   const el = document.getElementById("toast");
@@ -39,6 +39,7 @@ function setPage(name) {
   if (name === "dashboard" && typeof refreshDashboard === "function") refreshDashboard();
   if (name === "reports" && typeof refreshReports === "function") refreshReports();
   if (name === "entry" && typeof refreshEntry === "function") refreshEntry();
+  if (name === "sop" && typeof renderSopPage === "function") renderSopPage();
 }
 
 function onHashChange() {
