@@ -1,4 +1,4 @@
-const pages = ["dashboard", "uploads", "master", "reports"];
+const pages = ["dashboard", "entry", "uploads", "master", "reports"];
 
 function showToast(message, isError) {
   const el = document.getElementById("toast");
@@ -38,6 +38,7 @@ function setPage(name) {
   if (name === "master") refreshMasterData();
   if (name === "dashboard" && typeof refreshDashboard === "function") refreshDashboard();
   if (name === "reports" && typeof refreshReports === "function") refreshReports();
+  if (name === "entry" && typeof refreshEntry === "function") refreshEntry();
 }
 
 function onHashChange() {
@@ -170,13 +171,14 @@ document.getElementById("rm-month-filter").addEventListener("change", drawRmTabl
 document.getElementById("clear-data-btn").addEventListener("click", async () => {
   const ok = await confirmModal(
     "Clear all data?",
-    "This removes the territory structure, RM master, and visit logs saved in this browser. It cannot be undone.",
+    "This removes the territory structure, RM master, visit logs, and data-entry drafts saved in this browser. It cannot be undone.",
     "Clear data"
   );
   if (!ok) return;
   await clearAllData();
   await refreshMasterData();
   if (typeof refreshDashboard === "function") await refreshDashboard();
+  if (typeof refreshEntry === "function") await refreshEntry();
   showToast("All saved data was cleared.");
 });
 

@@ -1,5 +1,5 @@
 const DB_NAME = "rmVisits";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 function openDb() {
   return new Promise((resolve, reject) => {
@@ -14,6 +14,9 @@ function openDb() {
       }
       if (!db.objectStoreNames.contains("visitLog")) {
         db.createObjectStore("visitLog", { keyPath: "month" });
+      }
+      if (!db.objectStoreNames.contains("entryDraft")) {
+        db.createObjectStore("entryDraft", { keyPath: "month" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -129,10 +132,39 @@ async function getAllVisitLogs() {
   return list.sort((a, b) => String(a.month).localeCompare(String(b.month)));
 }
 
+async function saveEntryDraft(month, days) {
+  const db = await openDb();
+  const tx = db.transaction("entryDraft", "readwrite");
+  tx.objectStore("entryDraft").put({
+    month: String(month),
+    days: days || [],
+    savedAt: new Date().toISOString()
+  });
+  await txDone(tx);
+  db.close();
+}
+
+async function getEntryDraft(month) {
+  const db = await openDb();
+  if (!db.objectStoreNames.contains("entryDraft")) {
+    db.close();
+    return null;
+  }
+  const tx = db.transaction("entryDraft", "readonly");
+  const rec = await new Promise((resolve, reject) => {
+    const req = tx.objectStore("entryDraft").get(String(month));
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+  db.close();
+  return rec;
+}
+
 async function clearAllData() {
   const db = await openDb();
   const names = ["territory", "rmMaster"];
   if (db.objectStoreNames.contains("visitLog")) names.push("visitLog");
+  if (db.objectStoreNames.contains("entryDraft")) names.push("entryDraft");
   const tx = db.transaction(names, "readwrite");
   names.forEach((n) => tx.objectStore(n).clear());
   await txDone(tx);

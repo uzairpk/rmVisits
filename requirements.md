@@ -124,7 +124,7 @@ The header row may not be row 1 – detect the row that contains these headers. 
 
 **Time and distance:**
 - **Daily Total Hrs** = from the EARLIEST to the LATEST time that day across all Trip Start/End and Prod. Start/End
-  times of all rows (Market Visit and Transit)
+  times of all rows of that day (any status)
 - **Daily Travel Time** = Daily Total Hrs − Daily Productive Time (never negative; if negative show 0 and flag)
 - **Daily KMs** = sum of KMs of all rows that day; blank = no data (not zero)
 - **# Towns (day)** = number of Counted Towns that day
@@ -260,6 +260,76 @@ Columns (in this order):
 - **Over SOP**: RMs with Meetings > 3, Office Work > 4 or Leaves > 1.
 - **Base town mismatch**: any base town in RM master not found in territory structure.
 
+### 5.8 Data Entry page (new sidebar item "Data Entry")
+Purpose: enter visit data without spelling/format mistakes, then EXPORT to Excel, paste into the master visit log,
+and upload as usual. The Excel visit log remains the master record. Entry rows are NOT added to the dashboard directly.
+
+**Main screen**
+- Month selector + "Export to Excel" button at the top.
+- Table grouped by RM (all RMs from RM master). Each RM header row has a "+" button → opens the entry pop-up for that RM.
+- Under each RM: the days already entered (Date, Day type, activities summary, Total hrs, Valid/Invalid, KMs),
+  each with Edit ✏️ and Delete 🗑. Dates still empty for that RM (up to today) are listed as "Not entered".
+- Draft is saved in the browser automatically, so nothing is lost if the browser is closed.
+
+**Entry pop-up – top part (once per day)**
+- RM (pre-selected, changeable), Date (date picker; next empty date suggested).
+- **Day type**: Field day · Leave · Holiday · Full-day Meeting · Full-day Office Work.
+- Field day only: **Trip Start**, **Trip End** (24h time pickers), **KMs** (one number for the whole day).
+- Leave / Holiday / Full-day Meeting / Full-day Office Work: only a Remarks field; everything else hidden.
+- **Date range for Leave and Holiday**: when Day type is Leave or Holiday, a "To date" field appears next to Date.
+  Submit creates one day per date in the range (e.g. 20–24 Oct = 5 leave days), skipping dates that already have an entry
+  for that RM, and shows which dates were skipped. Remarks are copied to every day.
+- **Leave example**: Day type = Leave, remarks "Annual leave" → exported as one row: Region, Manager Name, Date, Day,
+  Status = Leave, Remarks; all other columns blank. Dashboard: Leaves +1, target adjusted per section 4.3.
+
+**Entry pop-up – activity lines (Field day only; "+ Add activity" for each)**
+Each line:
+- **Status**: Market Visit · Transit · Meeting · Office Work
+- **Town (actual)**: searchable dropdown; required for Market Visit, optional for others.
+  Defaults to towns of the RM's region, with a "show all regions" option. Region and Territory auto-fill from the town.
+- **Planned town**: Market Visit only; optional, defaults to the actual town.
+- **Prod Start**, **Prod End** (24h time pickers): Market Visit lines ONLY (productive time in that town).
+  Transit / Meeting / Office Work lines have NO times – only Status, optional Town and Remarks
+  (the day's Trip Start–End already covers the full day).
+- **Remarks** (per line).
+- Remove ✕ button per line.
+
+**Validation in the pop-up**
+- Block: missing RM / date / day type; Field day without Trip Start/End or without any activity line;
+  Market Visit line without town or without Prod Start/End; Prod End before Prod Start; a Market Visit outside
+  Trip Start–End; Market Visit lines overlapping each other;
+  same RM + date already in the draft (offer to edit it instead).
+- Warn (allow): the same RM + date already exists in uploaded data.
+- Live summary at the bottom, using section 4 rules:
+  "Total 8.1 hrs · Prod 5.75 · 2 towns counted · ✅ Valid" or "❌ Invalid – No town ≥ 2h / Total < 5h".
+- Buttons: Submit (saves the whole day) and Cancel.
+
+**How a mixed day counts**
+- A Field day with at least one Market Visit line = one market visit day (Valid/Invalid as section 4).
+  Its Transit / Meeting / Office Work lines are shown in Day Detail with their remarks but do NOT add to
+  Meeting / Transit / Office Work day counts (those count full days only).
+- A Field day with only Transit lines = Transit day. With only Meeting / Office Work lines = Meeting / Office Work day.
+
+**Export to Excel**
+- Columns EXACTLY as the visit log in section 3.3, same order and header names:
+  Region | Manager Name | Date | Day | Territory | Planned Town | Tracker Presence | Trip Start Time | Trip End Time |
+  Total Trip Time | Prod. Start Time | Prod. End Time | Total Prod Time | Travel Time | Status | Remarks | KMs
+- One row per activity line; non-field days (Leave, Holiday, full-day Meeting/Office Work) = one row with Status and Remarks.
+- Each row of a Field day repeats the day's Trip Start / Trip End. KMs on the FIRST row of the day only.
+- Market Visit rows: Prod. Start / Prod. End = the line's times; Total Prod Time = Prod End − Prod Start.
+  Transit / Meeting / Office Work rows: Prod. Start / Prod. End blank, Total Prod Time = 0. Total Trip Time = Trip End − Trip Start on the first row of the day, 0 on others.
+  Travel Time = 0 (the app recalculates it).
+- Tracker Presence = actual town; Planned Town = planned town (Market Visit) or actual town / blank (others).
+- Region = RM's region; Territory from the town.
+- Dates as real Excel dates, times as real Excel time values (not text). Names exactly as in RM master / Structure.
+- Rows sorted by RM, then date, then in the order the lines were entered in the pop-up.
+- Options: export all draft rows, or only rows not yet exported. Exported days marked "Exported ✓".
+  "Clear exported rows" button (with confirm).
+- Instruction on the page: "Paste into the master log using Paste Special → Values (Ctrl+Alt+V, V)".
+
+### 5.9 Open questions
+- Half-day leave (e.g. market visit in the morning, leave in the afternoon): not handled yet – to be decided.
+
 ## 6. Reports (each exportable to Excel; PDF later)
 1. RM Monthly Summary (same as Ranking table, incl. Total KMs and Avg KMs / day)
 2. RM Day-wise Detail (same as Day Detail incl. KMs, all RMs)
@@ -280,7 +350,7 @@ Columns (in this order):
 - "Clear all data" button in settings.
 - Keep code simple and readable, split into a few files: `index.html`, `css/style.css`, `js/upload.js`,
   `js/calculations.js`, `js/dashboard.js`, `js/reports.js`.
-- Single-page app with a left sidebar: Dashboard, Uploads, Master Data, Reports.
+- Single-page app with a left sidebar: Dashboard, Data Entry, Uploads, Master Data, Reports.
 
 ### Sharing
 - Option A: zip the folder and send it. Colleague unzips and opens `index.html`.

@@ -405,12 +405,10 @@ function maxMins(rows, field) {
   return Math.max.apply(null, vals.map(Number));
 }
 
-/* Section 4.2 – earliest to latest Trip/Prod time on Market Visit and Transit rows. */
+/* Section 4.2 – earliest to latest Trip/Prod time on all rows of the day, any status. */
 function dayTimeBounds(rows) {
   var times = [];
   (rows || []).forEach(function (r) {
-    var st = statusKey(r.status);
-    if (st !== STATUS_VISIT && st !== STATUS_TRANSIT) return;
     [r.tripStartMin, r.tripEndMin, r.prodStartMin, r.prodEndMin].forEach(function (m) {
       if (m == null || m === "") return;
       var n = Number(m);

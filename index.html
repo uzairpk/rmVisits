@@ -18,6 +18,7 @@
 
     <nav class="nav">
       <a href="#dashboard" class="nav-link active" data-page="dashboard">Dashboard</a>
+      <a href="#entry" class="nav-link" data-page="entry">Data Entry</a>
       <a href="#uploads" class="nav-link" data-page="uploads">Uploads</a>
       <a href="#master" class="nav-link" data-page="master">Master Data</a>
       <a href="#reports" class="nav-link" data-page="reports">Reports</a>
@@ -146,6 +147,25 @@
       </div>
     </section>
 
+    <section id="page-entry" class="page">
+      <header class="page-header">
+        <h1>Data Entry</h1>
+        <p class="muted">Enter days here, then export Excel and upload as usual. Draft stays in this browser and does not change the dashboard.</p>
+      </header>
+      <div class="filter-bar">
+        <label class="filter-item">Month
+          <select id="entry-month" class="select"></select>
+        </label>
+        <div class="card-actions">
+          <button type="button" class="btn btn-primary" id="btn-entry-export-all">Export to Excel</button>
+          <button type="button" class="btn" id="btn-entry-export-new">Export new only</button>
+          <button type="button" class="btn btn-ghost" id="btn-entry-clear-exported">Clear exported rows</button>
+        </div>
+      </div>
+      <p class="muted tiny" id="entry-hint">Paste into the master log using Paste Special → Values (Ctrl+Alt+V, V).</p>
+      <div id="entry-body"></div>
+    </section>
+
     <section id="page-uploads" class="page">
       <header class="page-header">
         <h1>Uploads</h1>
@@ -267,6 +287,59 @@
     </div>
   </div>
 
+  <div id="entry-modal" class="modal entry-modal" hidden>
+    <div class="modal-card entry-card">
+      <h2 id="entry-modal-title">Add day</h2>
+      <p id="entry-warn" class="entry-warn" hidden></p>
+      <p id="entry-errors" class="entry-errors" hidden></p>
+      <div class="entry-top">
+        <label class="entry-field">RM
+          <select id="entry-rm" class="select"></select>
+        </label>
+        <label class="entry-field">Date
+          <input type="date" id="entry-date" class="select" />
+        </label>
+        <label class="entry-field" id="entry-to-wrap" hidden>To date
+          <input type="date" id="entry-to-date" class="select" />
+        </label>
+        <label class="entry-field">Day type
+          <select id="entry-day-type" class="select">
+            <option value="field">Field day</option>
+            <option value="leave">Leave</option>
+            <option value="holiday">Holiday</option>
+            <option value="meeting">Full-day Meeting</option>
+            <option value="office">Full-day Office Work</option>
+          </select>
+        </label>
+        <label class="entry-field field-only">Trip Start
+          <input type="time" id="entry-trip-start" class="select" step="60" />
+        </label>
+        <label class="entry-field field-only">Trip End
+          <input type="time" id="entry-trip-end" class="select" step="60" />
+        </label>
+        <label class="entry-field field-only">KMs
+          <input type="number" id="entry-kms" class="select" min="0" step="1" />
+        </label>
+        <label class="entry-field entry-remarks-wrap nonfield-only" hidden>Remarks
+          <input type="text" id="entry-remarks" class="select" />
+        </label>
+      </div>
+      <div id="entry-field-block">
+        <div class="entry-act-head">
+          <h3>Activities</h3>
+          <label class="tiny-check"><input type="checkbox" id="entry-all-regions" /> Show all regions</label>
+        </div>
+        <div id="entry-lines"></div>
+        <button type="button" class="btn btn-ghost" id="entry-add-line">+ Add activity</button>
+      </div>
+      <div id="entry-summary" class="entry-summary"></div>
+      <div class="modal-actions">
+        <button type="button" id="entry-cancel" class="btn btn-ghost">Cancel</button>
+        <button type="button" id="entry-submit" class="btn btn-primary">Submit</button>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="toast" hidden></div>
 
   <script src="libs/xlsx.full.min.js"></script>
@@ -278,5 +351,6 @@
   <script src="js/upload.js"></script>
   <script src="js/dashboard.js"></script>
   <script src="js/reports.js"></script>
+  <script src="js/entry.js"></script>
 </body>
 </html>
