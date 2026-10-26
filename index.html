@@ -293,15 +293,6 @@
       <p id="entry-warn" class="entry-warn" hidden></p>
       <p id="entry-errors" class="entry-errors" hidden></p>
       <div class="entry-top">
-        <label class="entry-field">RM
-          <select id="entry-rm" class="select"></select>
-        </label>
-        <label class="entry-field">Date
-          <input type="date" id="entry-date" class="select" />
-        </label>
-        <label class="entry-field" id="entry-to-wrap" hidden>To date
-          <input type="date" id="entry-to-date" class="select" />
-        </label>
         <label class="entry-field">Day type
           <select id="entry-day-type" class="select">
             <option value="field">Field day</option>
@@ -311,11 +302,32 @@
             <option value="office">Full-day Office Work</option>
           </select>
         </label>
+        <label class="entry-field">RM
+          <select id="entry-rm" class="select"></select>
+        </label>
+        <label class="entry-field">Date
+          <span class="dt-wrap">
+            <input type="date" id="entry-date" class="select" />
+            <button type="button" class="dt-open" data-kind="date" tabindex="-1" aria-label="Open calendar"></button>
+          </span>
+        </label>
+        <label class="entry-field" id="entry-to-wrap" hidden>To date
+          <span class="dt-wrap">
+            <input type="date" id="entry-to-date" class="select" />
+            <button type="button" class="dt-open" data-kind="date" tabindex="-1" aria-label="Open calendar"></button>
+          </span>
+        </label>
         <label class="entry-field field-only">Trip Start
-          <input type="time" id="entry-trip-start" class="select" step="60" />
+          <span class="dt-wrap">
+            <input type="time" id="entry-trip-start" class="select" step="60" />
+            <button type="button" class="dt-open" data-kind="time" tabindex="-1" aria-label="Open time picker"></button>
+          </span>
         </label>
         <label class="entry-field field-only">Trip End
-          <input type="time" id="entry-trip-end" class="select" step="60" />
+          <span class="dt-wrap">
+            <input type="time" id="entry-trip-end" class="select" step="60" />
+            <button type="button" class="dt-open" data-kind="time" tabindex="-1" aria-label="Open time picker"></button>
+          </span>
         </label>
         <label class="entry-field field-only">KMs
           <input type="number" id="entry-kms" class="select" min="0" step="1" />

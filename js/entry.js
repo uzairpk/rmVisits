@@ -195,11 +195,14 @@ function activitySummary(day) {
   }).join(" · ") || "No activities";
 }
 
+function dateAlreadyEntered(rmName, dateISO) {
+  const inDraft = entryState.days.some((d) => namesLikelySame(d.rmName, rmName) && d.dateISO === dateISO);
+  return inDraft || uploadedHasDay(rmName, dateISO);
+}
+
 function nextEmptyDate(rmName) {
-  const taken = {};
-  entryState.days.filter((d) => namesLikelySame(d.rmName, rmName)).forEach((d) => { taken[d.dateISO] = true; });
   const dates = datesInMonth(entryState.month, true);
-  return dates.find((iso) => !taken[iso]) || dates[dates.length - 1] || "";
+  return dates.find((iso) => !dateAlreadyEntered(rmName, iso)) || dates[dates.length - 1] || "";
 }
 
 function uploadedHasDay(rmName, dateISO) {
@@ -294,13 +297,16 @@ function updateEntrySummary() {
     box.textContent = ENTRY_DAY_TYPES[day.dayType] + (day.remarks ? " · " + day.remarks : "");
     return;
   }
-  const rec = summarizeDraftDay(day);
-  const hasVisit = (day.activities || []).some((a) => a.status === "Market Visit");
-  if (!hasVisit) {
+  const hasTrip = !!(day.tripStart && day.tripEnd);
+  const hasMvProd = (day.activities || []).some((a) =>
+    a.status === "Market Visit" && a.prodStart && a.prodEnd
+  );
+  if (!hasTrip || !hasMvProd) {
     box.className = "entry-summary note";
-    box.textContent = rec.dayType + (rec.dailyTotalHours != null ? " · Total " + formatHours(rec.dailyTotalHours) + " hrs" : "");
+    box.textContent = "Enter trip and prod times to see result";
     return;
   }
+  const rec = summarizeDraftDay(day);
   const tags = [];
   if (rec.isInvalid) {
     const reason = String(rec.invalidReason || "");
@@ -370,8 +376,8 @@ function addActivityLine(data) {
     '<input type="text" class="select act-town" autocomplete="off" value="' + escapeHtml(act.town || "") + '" />' +
     '<div class="town-menu" hidden></div></div></label>' +
     '<label class="mv-only">Planned town<input type="text" class="select act-planned" value="' + escapeHtml(act.plannedTown || "") + '" /></label>' +
-    '<label class="mv-only">Prod Start<input type="time" class="select act-prod-start" step="60" value="' + escapeHtml(act.prodStart || "") + '" /></label>' +
-    '<label class="mv-only">Prod End<input type="time" class="select act-prod-end" step="60" value="' + escapeHtml(act.prodEnd || "") + '" /></label>' +
+    '<label class="mv-only">Prod Start<span class="dt-wrap"><input type="time" class="select act-prod-start" step="60" value="' + escapeHtml(act.prodStart || "") + '" /><button type="button" class="dt-open" data-kind="time" tabindex="-1" aria-label="Open time picker"></button></span></label>' +
+    '<label class="mv-only">Prod End<span class="dt-wrap"><input type="time" class="select act-prod-end" step="60" value="' + escapeHtml(act.prodEnd || "") + '" /><button type="button" class="dt-open" data-kind="time" tabindex="-1" aria-label="Open time picker"></button></span></label>' +
     '<label>Remarks<input type="text" class="select act-remarks" value="' + escapeHtml(act.remarks || "") + '" /></label>' +
     '<button type="button" class="btn btn-ghost btn-icon act-remove" title="Remove">✕</button>';
   wrap.appendChild(el);
@@ -430,7 +436,8 @@ function syncPopupType() {
   document.querySelectorAll(".field-only").forEach((el) => { el.hidden = !field; });
   document.querySelectorAll(".nonfield-only").forEach((el) => { el.hidden = field; });
   document.getElementById("entry-field-block").hidden = !field;
-  document.getElementById("entry-to-wrap").hidden = !range || !!entryState.editingId;
+  document.getElementById("entry-to-wrap").hidden = !range;
+  if (!range) document.getElementById("entry-to-date").value = "";
   if (field && !document.querySelector("#entry-lines .entry-line")) addActivityLine();
   updateEntrySummary();
 }
@@ -476,7 +483,7 @@ function openEntryPopup(opts) {
   }
   syncPopupType();
   document.getElementById("entry-modal").hidden = false;
-  document.getElementById("entry-rm").focus();
+  document.getElementById("entry-day-type").focus();
 }
 
 function closeEntryPopup() {
@@ -570,9 +577,10 @@ function setCell(ws, r, c, cell) {
   ws[XLSX.utils.encode_cell({ r: r, c: c })] = cell;
 }
 
-function exportDraftDays(onlyNew) {
+function exportDraftDays(onlyNew, rmName) {
   const days = entryState.days
     .filter((d) => !onlyNew || !d.exported)
+    .filter((d) => !rmName || namesLikelySame(d.rmName, rmName))
     .slice()
     .sort((a, b) => {
       const n = String(a.rmName).localeCompare(String(b.rmName));
@@ -580,7 +588,7 @@ function exportDraftDays(onlyNew) {
       return String(a.dateISO).localeCompare(String(b.dateISO));
     });
   if (!days.length) {
-    showToast(onlyNew ? "No new rows to export." : "Nothing to export.", true);
+    showToast(onlyNew ? "No new rows to export." : (rmName ? "Nothing to export for this RM." : "Nothing to export."), true);
     return;
   }
   const headers = [
@@ -640,7 +648,8 @@ function exportDraftDays(onlyNew) {
   ws["!cols"] = headers.map((h) => ({ wch: Math.max(12, h.length + 2) }));
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Visit log");
-  XLSX.writeFile(wb, "visit_log_draft_" + entryState.month + ".xlsx");
+  const rmPart = rmName ? "_" + String(rmName).replace(/[^\w]+/g, "_") : "";
+  XLSX.writeFile(wb, "visit_log_draft_" + entryState.month + rmPart + ".xlsx");
   days.forEach((d) => { d.exported = true; });
   persistDraft().then(drawEntryList);
   showToast("Excel downloaded. Paste Special → Values into the master log.");
@@ -660,7 +669,7 @@ function drawEntryList() {
       .sort((a, b) => a.dateISO.localeCompare(b.dateISO));
     const taken = {};
     days.forEach((d) => { taken[d.dateISO] = true; });
-    const missing = emptyDates.filter((iso) => !taken[iso]);
+    const missing = emptyDates.filter((iso) => !taken[iso] && !uploadedHasDay(rm.rmName, iso));
     const rows = days.map((d) => {
       const rec = summarizeDraftDay(d);
       let verdict = rec.dayType;
@@ -691,8 +700,11 @@ function drawEntryList() {
       : '<div class="entry-not">All dates up to today are entered.</div>';
     return '<article class="entry-rm-block"><div class="entry-rm-head"><div><h2>' + escapeHtml(rm.rmName) +
       "</h2><div class=\"sub\">" + escapeHtml(rm.region || "") + " · Base " + escapeHtml(rm.baseTown || "—") +
-      "</div></div><button type=\"button\" class=\"btn btn-primary btn-add entry-add\" data-rm=\"" +
-      escapeHtml(rm.rmName) + "\" title=\"Add day\">+</button></div>" + table + miss + "</article>";
+      "</div></div><div class=\"entry-rm-actions\">" +
+      '<button type="button" class="btn btn-ghost btn-add entry-export-rm" data-rm="' + escapeHtml(rm.rmName) +
+      '" title="Export this RM" aria-label="Export this RM"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 4v10"/><path d="M8 10l4 4 4-4"/><path d="M5 18h14"/></svg></button>' +
+      '<button type="button" class="btn btn-primary btn-add entry-add" data-rm="' +
+      escapeHtml(rm.rmName) + '" title="Add day">+</button></div></div>' + table + miss + "</article>";
   }).join("");
 }
 
@@ -730,6 +742,11 @@ document.getElementById("entry-month").addEventListener("change", async () => {
 });
 
 document.getElementById("entry-body").addEventListener("click", (evt) => {
+  const exp = evt.target.closest(".entry-export-rm");
+  if (exp) {
+    exportDraftDays(false, exp.dataset.rm);
+    return;
+  }
   const add = evt.target.closest(".entry-add");
   if (add) {
     openEntryPopup({ rmName: add.dataset.rm });
@@ -787,5 +804,15 @@ document.addEventListener("click", (evt) => {
   if (!evt.target.closest(".town-picker")) closeTownMenus();
 });
 document.getElementById("entry-modal").addEventListener("click", (evt) => {
+  const pick = evt.target.closest(".dt-open");
+  if (pick) {
+    const input = pick.parentElement && pick.parentElement.querySelector("input");
+    if (input && typeof input.showPicker === "function") {
+      try { input.showPicker(); } catch (err) { input.focus(); }
+    } else if (input) {
+      input.focus();
+    }
+    return;
+  }
   if (evt.target.id === "entry-modal") closeEntryPopup();
 });

@@ -265,18 +265,25 @@ Purpose: enter visit data without spelling/format mistakes, then EXPORT to Excel
 and upload as usual. The Excel visit log remains the master record. Entry rows are NOT added to the dashboard directly.
 
 **Main screen**
-- Month selector + "Export to Excel" button at the top.
+- Month selector + "Export to Excel" (all RMs in one file) + "Export new only" + "Clear exported rows" at the top.
+- Each RM header also has a small export icon to export only that RM (same format).
 - Table grouped by RM (all RMs from RM master). Each RM header row has a "+" button → opens the entry pop-up for that RM.
 - Under each RM: the days already entered (Date, Day type, activities summary, Total hrs, Valid/Invalid, KMs),
-  each with Edit ✏️ and Delete 🗑. Dates still empty for that RM (up to today) are listed as "Not entered".
+  each with Edit ✏️ and Delete 🗑.
+- "Not entered" chips: dates up to today that have NO entry for that RM in BOTH the uploaded visit log AND the draft.
+  Clicking a chip opens the pop-up for that RM with that date pre-filled.
 - Draft is saved in the browser automatically, so nothing is lost if the browser is closed.
 
 **Entry pop-up – top part (once per day)**
-- RM (pre-selected, changeable), Date (date picker; next empty date suggested).
+- Field order: **Day type** FIRST (it decides which fields show), then RM (pre-selected, changeable), then Date
+  (next empty date suggested).
 - **Day type**: Field day · Leave · Holiday · Full-day Meeting · Full-day Office Work.
+- Date and time fields use the browser's own pickers; the calendar / clock ICON inside each field must be clearly visible
+  on the dark theme (light or accent-coloured icon, not dark grey). Clicking the icon opens the picker; typing also works.
 - Field day only: **Trip Start**, **Trip End** (24h time pickers), **KMs** (one number for the whole day).
 - Leave / Holiday / Full-day Meeting / Full-day Office Work: only a Remarks field; everything else hidden.
-- **Date range for Leave and Holiday**: when Day type is Leave or Holiday, a "To date" field appears next to Date.
+- **Date range for Leave and Holiday**: ONLY when Day type is Leave or Holiday, a "To date" field appears next to Date
+  (hidden for all other day types).
   Submit creates one day per date in the range (e.g. 20–24 Oct = 5 leave days), skipping dates that already have an entry
   for that RM, and shows which dates were skipped. Remarks are copied to every day.
 - **Leave example**: Day type = Leave, remarks "Annual leave" → exported as one row: Region, Manager Name, Date, Day,
@@ -300,7 +307,8 @@ Each line:
   Trip Start–End; Market Visit lines overlapping each other;
   same RM + date already in the draft (offer to edit it instead).
 - Warn (allow): the same RM + date already exists in uploaded data.
-- Live summary at the bottom, using section 4 rules:
+- Live summary at the bottom: neutral grey "Enter trip and prod times to see result" until Trip Start/End and at least
+  one Market Visit with Prod times are filled. Then, using section 4 rules:
   "Total 8.1 hrs · Prod 5.75 · 2 towns counted · ✅ Valid" or "❌ Invalid – No town ≥ 2h / Total < 5h".
 - Buttons: Submit (saves the whole day) and Cancel.
 
