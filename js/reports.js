@@ -70,7 +70,7 @@ async function downloadSummaryReport() {
     Invalid: s.invalidDays,
     "Base-only counted": s.baseOnlyCounted,
     "Base-only over": s.baseOnlyNotCounted,
-    "Other TTY": s.otherTtyDays,
+    "Outside Base": s.outsideBaseDays,
     Leave: s.leaveDays,
     Holiday: s.holidayDays,
     Meeting: s.meetingDays,

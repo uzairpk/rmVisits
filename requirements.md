@@ -108,7 +108,8 @@ The header row may not be row 1 – detect the row that contains these headers. 
 **Base town:**
 - **Base Town Visit** = a Valid Day where at least one Counted Town is one of the RM's base towns (info count)
 - **Base-only Day** = a Valid Day where ALL Counted Towns are base towns
-- **Other TTY Day** = a Valid Day with at least one Counted Town that is NOT a base town
+- **Outside Base Day** = a Valid Day with at least one Counted Town that is NOT a base town
+  (= days the RM actually went out into the field, away from his base town; formerly called "Other TTY")
   (counts toward target regardless of the base-town cap)
 
 **Day label (one label per RM per date – never counted twice). Priority:**
@@ -136,12 +137,12 @@ The header row may not be row 1 – detect the row that contains these headers. 
   - Examples (Target 18): 2 leaves → 17 · 3 → 17 · 5 → 15 · 10 → 12
   - Holidays do NOT reduce target.
 - **Base-only Days Counted** = MIN(Base-only Days, 4); **Base-only Days Not Counted** = the excess over 4
-- **Achieved** = Other TTY Days + Base-only Days Counted
+- **Achieved** = Outside Base Days + Base-only Days Counted
 - **Achievement %** = Achieved ÷ Adjusted Target
 - **Data Up To** = last date present in the uploaded visit log for that month
 - **Expected by Now** = Adjusted Target × (day number of Data Up To ÷ days in month), rounded (calendar days)
 - **Pace** = Achieved − Expected by Now → ≥ 0 "On track" (green), −1 to −2 "Slightly behind" (amber), ≤ −3 "Behind" (red)
-- **Day counts**: Valid, Invalid, Base Town Visits, Base-only Days (counted / not counted), Other TTY Days,
+- **Day counts**: Valid, Invalid, Base Town Visits, Base-only Days (counted / not counted), Outside Base Days,
   Leave, Holiday, Meeting, Office Work, Transit, Missing
 - **SOP comparison** (shown as "actual / SOP", red when over): Meetings x / 3, Office Work x / 4, Leaves x / 1
 - **Avg Productive Hrs / valid day**
@@ -182,7 +183,7 @@ The header row may not be row 1 – detect the row that contains these headers. 
 3. **RM × Date grid** – one row per RM, one column per date of the month, each cell coloured by day type
    (Valid, Invalid, Leave, Holiday, Meeting, Office Work, Transit, Missing, future = empty). Legend underneath.
    Hover shows towns and productive hours.
-4. **Base-only (counted / not counted) vs Other TTY days by RM** – stacked horizontal bar, with a line at 4
+4. **Base-only (counted / not counted) vs Outside Base days by RM** – stacked horizontal bar, with a line at 4
 5. **Average productive hrs per valid day by RM** – bar, no reference line (5 hrs now applies to total time)
 6. **3-month Achievement % trend by RM** – line chart; only shown when 2+ months are uploaded
 - Remove all other charts (daily trend, productive vs travel, day type mix, town coverage by region).
@@ -190,7 +191,7 @@ The header row may not be row 1 – detect the row that contains these headers. 
 ### 5.3 RM Ranking table
 - ONE table, sortable.
 - Columns: RM, Region, Adj. Target, Expected by Now, Achieved, Ach %, Pace, Valid, Invalid, Base-only (counted/over),
-  Other TTY, Leave, Holiday, Meeting, Office Work, Missing, Territories Not Visited, Towns Not Visited (6M),
+  Outside Base, Leave, Holiday, Meeting, Office Work, Missing, Territories Not Visited, Towns Not Visited (6M),
   Towns Repeated, Plan %, Avg Prod Hrs, Total KMs, Avg KMs / day.
 
 ### 5.4 RM Cards (one per RM, in a grid – WhatsApp-ready)
@@ -199,7 +200,7 @@ The header row may not be row 1 – detect the row that contains these headers. 
   Header colour follows Pace (green On track, amber Slightly behind, red Behind).
   At month end (Data Up To = last day of month) colour by Ach %: green ≥ 100%, amber 70–99%, red < 70%.
 - KPI block in 2 columns (label | value), equal number of rows on each side:
-  - Left: Target, Adjusted Target, Expected by Now, **Achieved**, **Ach %**, **Pace**, Other TTY Days,
+  - Left: Target, Adjusted Target, Expected by Now, **Achieved**, **Ach %**, **Pace**, Outside Base Days,
     Base-only Days (e.g. "5 · 4 counted"), Base Town Visits, Avg Prod Hrs / day, Total KMs
   - Right: Invalid Days, Leaves (x / 1), Holidays, Office Work (x / 4), Meetings (x / 3), Transit, Missing Days,
     Territories Not Visited (x / y), Towns Not Visited 6M (x / y), Towns Repeated (x / y), Avg KMs / visit day
@@ -213,6 +214,7 @@ The header row may not be row 1 – detect the row that contains these headers. 
     Base towns marked with a small "B".
   - # = Counted Towns that day.
   - TOTAL coloured green if the day is Valid, red if Invalid (TOTAL decides validity). PROD and TRAVEL plain.
+  - Invalid rows: after the towns, a small red tag with the reason: "No town ≥ 2h" and/or "Total < 5h".
   - Headers and numbers never wrap; only Towns may wrap and gets the remaining width.
   - Bold Totals row: # = DISTINCT Counted Towns in the month; KMs and hours = sums.
 - Own Copy image button.
@@ -244,7 +246,7 @@ Columns (in this order):
 
 ### 5.6 Month Comparison table (separate block)
 - Rows = RMs, grouped by metric OR per-RM mini table – columns = last 3 uploaded months (e.g. Aug | Sep | Oct).
-- Metrics: Target, Adjusted Target, Achieved, Ach %, Valid, Invalid, Base-only, Other TTY, Leaves, Holidays,
+- Metrics: Target, Adjusted Target, Achieved, Ach %, Valid, Invalid, Base-only, Outside Base, Leaves, Holidays,
   Office Work, Meetings, Territories Not Visited, Towns Not Visited (6M), Towns Repeated, Avg Prod Hrs, Total KMs.
 - Change vs previous month shown with ▲ / ▼ in green/red.
 

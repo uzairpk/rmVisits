@@ -44,7 +44,7 @@ const RANK_COLS = [
   { key: "validDays", label: "Valid" },
   { key: "invalidDays", label: "Invalid" },
   { key: "baseOnlyNotCounted", label: "Base-only (counted/over)" },
-  { key: "otherTtyDays", label: "Other TTY" },
+  { key: "outsideBaseDays", label: "Outside Base" },
   { key: "leaveDays", label: "Leave" },
   { key: "holidayDays", label: "Holiday" },
   { key: "meetingDays", label: "Meeting" },
@@ -326,7 +326,7 @@ function drawKpis(rows) {
     kpiHtml("Valid days", String(valid), "≥ " + SOP.minDayTotalHrs + " total hrs and a town ≥ " + SOP.minTownHrs + " prod hrs"),
     kpiHtml("Invalid days", String(sum(rows, "invalidDays")), "Total under " + SOP.minDayTotalHrs + " hrs and/or no town ≥ " + SOP.minTownHrs, "kpi-bad"),
     kpiHtml("Total visits", String(visits), "Counted towns across days"),
-    kpiHtml("Other TTY days", String(sum(rows, "otherTtyDays")), "Valid days with a non-base counted town"),
+    kpiHtml("Outside Base days", String(sum(rows, "outsideBaseDays")), "Valid days with a non-base counted town"),
     kpiHtml("Base-only counted", String(sum(rows, "baseOnlyCounted")), "Cap " + SOP.maxBaseOnlyDays + " toward target"),
     kpiHtml("Base-only not counted", String(sum(rows, "baseOnlyNotCounted")), "Base-only days over the cap of " + SOP.maxBaseOnlyDays),
     kpiHtml("Leave days", String(sum(rows, "leaveDays")), "SOP allows " + SOP.plannedLeaves + "; extra leaves reduce target"),
@@ -527,7 +527,7 @@ function drawCharts(rows, pack) {
   const ranked = rows.slice().sort((a, b) => (b.achievementPct || -1) - (a.achievementPct || -1));
   const names = ranked.map((s) => s.rmName);
   const h = Math.max(220, names.length * 36 + 56);
-  ["chart-achieve", "chart-plan", "chart-tty", "chart-avgprod"].forEach((id) => setBoxHeight(id, h));
+  ["chart-achieve", "chart-plan", "chart-outside-base", "chart-avgprod"].forEach((id) => setBoxHeight(id, h));
 
   upsertChart("chart-achieve", {
     type: "bar",
@@ -590,14 +590,14 @@ function drawCharts(rows, pack) {
     }), rmClickPlugin())
   });
 
-  upsertChart("chart-tty", {
+  upsertChart("chart-outside-base", {
     type: "bar",
     data: {
       labels: names,
       datasets: [
         { label: "Base-only counted", data: ranked.map((s) => s.baseOnlyCounted || 0), backgroundColor: COLOR.accent, borderRadius: 3 },
         { label: "Base-only not counted", data: ranked.map((s) => s.baseOnlyNotCounted || 0), backgroundColor: COLOR.red, borderRadius: 3 },
-        { label: "Other TTY", data: ranked.map((s) => s.otherTtyDays || 0), backgroundColor: COLOR.blue, borderRadius: 3 }
+        { label: "Outside Base", data: ranked.map((s) => s.outsideBaseDays || 0), backgroundColor: COLOR.blue, borderRadius: 3 }
       ]
     },
     options: Object.assign(chartOpts({
@@ -742,6 +742,15 @@ function townHoursHtml(list, baseTowns) {
   }).join(", ");
 }
 
+function invalidReasonTags(d) {
+  if (!d || !d.isInvalid) return "";
+  const tags = [];
+  const reason = String(d.invalidReason || "");
+  if (/No town/i.test(reason)) tags.push("No town ≥ 2h");
+  if (/Total under/i.test(reason) || /Total </i.test(reason)) tags.push("Total < 5h");
+  return tags.map((t) => '<span class="reason-tag">' + escapeHtml(t) + "</span>").join("");
+}
+
 function xy(part, whole) {
   if (part == null) return "—";
   return part + " / " + (whole == null ? "—" : whole);
@@ -760,7 +769,7 @@ function drawRmCards(rows, pack) {
       kpiPair("Achieved", s.achieved, true),
       kpiPair("Ach %", s.achievementPctLabel, true),
       kpiPair("Pace", s.paceLabel, true),
-      kpiPair("Other TTY Days", s.otherTtyDays),
+      kpiPair("Outside Base Days", s.outsideBaseDays),
       kpiPair("Base-only Days", s.baseOnlyLabel),
       kpiPair("Base Town Visits", s.baseTownDays),
       kpiPair("Avg Prod Hrs / day", s.avgProdHoursLabel),
@@ -787,7 +796,8 @@ function drawRmCards(rows, pack) {
       const totalTone = d.isValid ? "hrs-green" : "hrs-red";
       const travelCls = d.travelClamped ? "hrs-flag" : "";
       return "<tr><td class=\"rm-day-date\">" + escapeHtml(formatDisplayDate(d.dateISO)) +
-        "</td><td class=\"rm-day-towns\">" + townHoursHtml(d.townHours, s.baseTowns) + "</td>" +
+        "</td><td class=\"rm-day-towns\">" + townHoursHtml(d.townHours, s.baseTowns) +
+        invalidReasonTags(d) + "</td>" +
         numCell("", d.townCount) +
         numCell("", formatKms(d.dailyKms)) +
         numCell("", formatHours(d.dailyProdHours)) +
@@ -908,7 +918,7 @@ function drawMonthComparison(filtered) {
     { key: "validDays", label: "Valid", invert: false },
     { key: "invalidDays", label: "Invalid", invert: true },
     { key: "baseOnlyDays", label: "Base-only", invert: false },
-    { key: "otherTtyDays", label: "Other TTY", invert: false },
+    { key: "outsideBaseDays", label: "Outside Base", invert: false },
     { key: "leaveDays", label: "Leaves", invert: true },
     { key: "holidayDays", label: "Holidays", invert: false },
     { key: "officeworkDays", label: "Office Work", invert: false },

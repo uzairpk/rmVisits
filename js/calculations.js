@@ -455,7 +455,7 @@ function emptyDayRecord(rmName, dateISO) {
     isMissing: true,
     baseTownDay: false,
     baseOnlyDay: false,
-    otherTtyDay: false,
+    outsideBaseDay: false,
     baseTownKind: "—",
     planDeviationText: "",
     remarks: "",
@@ -498,7 +498,7 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
   var countedHasOther = counted.some(function (t) { return !isBaseTownName(t.name, baseTowns); });
   var baseTownVisit = !!(valid && countedHasBase);
   var baseOnlyDay = !!(valid && counted.length && !countedHasOther);
-  var otherTtyDay = !!(valid && countedHasOther);
+  var outsideBaseDay = !!(valid && countedHasOther); /* Outside Base: counted town that is not a base town */
   var baseTownKind = !valid ? "—" : (baseOnlyDay ? "Base-only" : (countedHasBase ? "Base + Other" : "No"));
   var deviations = uniqueSorted(visits.filter(function (r) { return r.planDeviation; }).map(function (r) {
     return r.plannedTownDisplay;
@@ -541,7 +541,7 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
     isMissing: false,
     baseTownDay: baseTownVisit,
     baseOnlyDay: baseOnlyDay,
-    otherTtyDay: otherTtyDay,
+    outsideBaseDay: outsideBaseDay,
     baseTownKind: baseTownKind,
     planDeviationText: deviations.join(", "),
     remarks: remarks.join("; "),
@@ -609,8 +609,8 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
   var baseOnlyDays = countTrue(days, "baseOnlyDay");
   var baseOnlyCounted = Math.min(baseOnlyDays, SOP.maxBaseOnlyDays);
   var baseOnlyNotCounted = Math.max(0, baseOnlyDays - SOP.maxBaseOnlyDays);
-  var otherTtyDays = countTrue(days, "otherTtyDay");
-  var achieved = otherTtyDays + baseOnlyCounted;
+  var outsideBaseDays = countTrue(days, "outsideBaseDay");
+  var achieved = outsideBaseDays + baseOnlyCounted;
   var achievementPct = adjustedTarget > 0 ? pct(achieved, adjustedTarget) : null;
   var dim = daysInMonthKey(monthKey);
   var dayNum = dataUpTo ? Number(String(dataUpTo).split("-")[2]) : 0;
@@ -712,7 +712,7 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
     baseOnlyCounted: baseOnlyCounted,
     baseOnlyNotCounted: baseOnlyNotCounted,
     baseOnlyLabel: baseOnlyNotCounted ? (baseOnlyDays + " · " + baseOnlyCounted + " counted") : String(baseOnlyDays),
-    otherTtyDays: otherTtyDays,
+    outsideBaseDays: outsideBaseDays,
     meetingDays: meetingDays,
     officeworkDays: officeworkDays,
     meetingsOverSop: meetingDays > SOP.meetings,

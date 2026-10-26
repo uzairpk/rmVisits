@@ -673,6 +673,19 @@ td.type-invalid { color: var(--danger); font-weight: 700; }
 .town-ok { color: #34d399; }
 .town-low { color: #e8a0a0; }
 .town-b { font-size: 0.65em; font-weight: 800; margin-left: 1px; }
+.reason-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.18);
+  white-space: nowrap;
+  vertical-align: middle;
+}
 .rm-kpi-row.sop-over dd { color: var(--danger); }
 .alert-reason { font-size: 0.75rem; color: var(--warn); }
 .rm-days td.hrs-flag { color: var(--warn); font-weight: 700; }
