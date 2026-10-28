@@ -1,0 +1,6 @@
+*.xlsx
+*.xls
+*.csv
+!samples/*.xlsx
+!samples/*.xls
+!samples/*.csv
