@@ -59,6 +59,15 @@
             <option value="all">All RMs</option>
           </select>
         </label>
+        <label class="filter-item">Late start after
+          <span class="dt-wrap">
+            <input type="time" id="dash-late-start" class="select" step="60" />
+            <button type="button" class="dt-open" data-kind="time" tabindex="-1" aria-label="Open time picker"></button>
+          </span>
+        </label>
+        <label class="filter-check">
+          <input type="checkbox" id="dash-show-start" /> Show start time
+        </label>
       </div>
 
       <div id="dash-empty" class="placeholder-card" hidden>
@@ -358,6 +367,16 @@
         <button type="button" id="entry-cancel" class="btn btn-ghost">Cancel</button>
         <button type="button" id="entry-submit" class="btn btn-primary">Submit</button>
       </div>
+    </div>
+  </div>
+
+  <div id="info-modal" class="modal" hidden>
+    <div class="modal-card card info-card" id="info-card" data-copy-title="">
+      <div class="card-head">
+        <h2 id="info-title">Detail</h2>
+        <button type="button" class="btn btn-ghost" id="info-close">Close</button>
+      </div>
+      <div id="info-body"></div>
     </div>
   </div>
 

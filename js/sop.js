@@ -54,6 +54,8 @@ function renderSopBenchmarks() {
     ["Planning / Office Work", SOP.officeWork],
     ["Leaves (in the SOP plan)", SOP.plannedLeaves],
     ["Min productive hrs per town", SOP.minTownHrs],
+    ["Same-territory town minimum", SOP.sameTerritoryHrs + " hrs if ≥ " + SOP.sameTerritoryTowns + " towns in that territory reach " + SOP.sameTerritoryHrs],
+    ["Late start default", SOP.lateStartDefault],
     ["Min total hrs per day (incl. travel)", SOP.minDayTotalHrs],
     ["Max base-only days counted toward target", SOP.maxBaseOnlyDays],
     ["Territories of the region", sopOnceInMonths(SOP.territoryCoverageMonths)],
@@ -65,28 +67,110 @@ function renderSopBenchmarks() {
   return sopCard("SOP benchmarks", body);
 }
 
+function sopTerritoryExamples() {
+  return [
+    {
+      label: "JLM: Jhelum " + SOP.sameTerritoryHrs + "+, Lalamusa 2.97",
+      towns: [
+        { name: "Jhelum", territory: "JLM", hours: 1.88 },
+        { name: "Lalamusa", territory: "JLM", hours: 2.97 }
+      ],
+      total: 6.1
+    },
+    {
+      label: "PSW: Nowshera 1.58, Peshawar 1.25",
+      towns: [
+        { name: "Nowshera", territory: "PSW", hours: 1.58 },
+        { name: "Peshawar", territory: "PSW", hours: 1.25 }
+      ],
+      total: 6.0
+    },
+    {
+      label: "SKG: Daska " + SOP.sameTerritoryHrs.toFixed(2) + ", Pasroor 0.93, Qila Kalar 3.08",
+      towns: [
+        { name: "Daska", territory: "SKG", hours: SOP.sameTerritoryHrs },
+        { name: "Pasroor", territory: "SKG", hours: 0.93 },
+        { name: "Qila Kalarwala", territory: "SKG", hours: 3.08 }
+      ],
+      total: 7.0
+    },
+    {
+      label: "FSD two towns + CHN 2.2 + JHG 1.8",
+      towns: [
+        { name: "FSD-3", territory: "FSD", hours: 1.6 },
+        { name: "FSD-4", territory: "FSD", hours: 1.7 },
+        { name: "Chiniot", territory: "CHN", hours: 2.2 },
+        { name: "Jhang", territory: "JHG", hours: 1.8 }
+      ],
+      total: 8.0
+    },
+    {
+      label: "KWL two towns, day total 4.6",
+      towns: [
+        { name: "Kacha Khu", territory: "KWL", hours: 1.7 },
+        { name: "Vejianwala", territory: "KWL", hours: 1.6 }
+      ],
+      total: 4.6
+    },
+    {
+      label: "SKT: Sialkot 1.8 (one town)",
+      towns: [{ name: "Sialkot", territory: "SKT", hours: 1.8 }],
+      total: 6.0
+    }
+  ];
+}
+
+function sopMinsForGroups(towns) {
+  const by = {};
+  (towns || []).forEach((t) => {
+    const k = t.territory || "";
+    if (!by[k]) by[k] = [];
+    by[k].push(t);
+  });
+  return Object.keys(by).sort().map((ter) => {
+    const reached = by[ter].filter((t) => t.hours >= SOP.sameTerritoryHrs).length;
+    const min = reached >= SOP.sameTerritoryTowns ? SOP.sameTerritoryHrs : SOP.minTownHrs;
+    return ter + " " + min;
+  }).join(", ");
+}
+
 function renderSopDayJudged() {
   const steps = [
     "Is it a Market Visit day? If yes, other statuses that day do not add extra day counts.",
-    "For each town, sum productive hours. A Counted Town has ≥ " + SOP.minTownHrs + " productive hrs.",
-    "Is there at least one Counted Town?",
+    "Group the day's towns by territory.",
+    "In a territory where at least " + SOP.sameTerritoryTowns + " towns have ≥ " + SOP.sameTerritoryHrs +
+      " productive hrs, the town minimum is " + SOP.sameTerritoryHrs + " hrs. Otherwise the minimum is " +
+      SOP.minTownHrs + " hrs.",
+    "A Counted Town meets that territory's minimum. Is there at least one Counted Town?",
     "Is Daily Total Hrs (first start to last end, including travel) ≥ " + SOP.minDayTotalHrs + "?",
     "Both yes → Valid. Otherwise Invalid, with the matching reason(s)."
   ];
   const flow = '<ol class="sop-flow">' + steps.map((s) => "<li>" + sopEsc(s) + "</li>").join("") + "</ol>";
-  const note = "<p class=\"muted\">The " + sopEsc(SOP.minTownHrs) +
-    " hrs per town rule is always on productive time; the " + sopEsc(SOP.minDayTotalHrs) +
-    " hrs per day rule is on total time.</p>";
-  const rows = sopExampleRows().map((ex) => {
+  const note = "<p class=\"muted\">Town minimums are always on productive time; the " + sopEsc(SOP.minDayTotalHrs) +
+    " hrs per day rule is on total time. Same-territory rule – Management instruction, Nov 2026.</p>";
+  const simple = sopExampleRows().map((ex) => {
     const rec = judgeTownHours(ex.towns, ex.total);
     const verdict = sopJudgeLabel(ex.towns, ex.total);
     return "<tr><td>" + sopEsc(ex.towns.join(", ")) + "</td><td>" + sopEsc(ex.total) +
       "</td><td>" + rec.counted + '</td><td class="' + verdict.cls + '">' + sopEsc(verdict.text) + "</td></tr>";
   }).join("");
-  const table = '<table class="data sop-table"><thead><tr>' +
+  const simpleTable = "<p><strong>Day totals</strong></p>" +
+    '<table class="data sop-table"><thead><tr>' +
     "<th>Town productive hrs</th><th>Daily total hrs (incl. travel)</th><th>Counted towns</th><th>Result</th>" +
-    "</tr></thead><tbody>" + rows + "</tbody></table>";
-  return sopCard("How a day is judged", flow + note + table);
+    "</tr></thead><tbody>" + simple + "</tbody></table>";
+  const terRows = sopTerritoryExamples().map((ex) => {
+    const rec = judgeTownRecords(ex.towns.map((t) => Object.assign({}, t)), ex.total);
+    const mins = sopMinsForGroups(ex.towns);
+    const cls = rec.isValid ? "sop-ok" : "sop-bad";
+    const text = rec.isValid ? "Valid" : "Invalid (" + rec.reasons.join(", ") + ")";
+    return "<tr><td>" + sopEsc(ex.label) + "</td><td>" + sopEsc(mins) + "</td><td>" + rec.counted +
+      '</td><td class="' + cls + '">' + sopEsc(text) + "</td></tr>";
+  }).join("");
+  const terTable = "<p><strong>Same-territory rule – Management instruction, Nov 2026</strong></p>" +
+    '<table class="data sop-table"><thead><tr>' +
+    "<th>Towns (territory: hrs)</th><th>Minimum per territory</th><th>Counted</th><th>Day</th>" +
+    "</tr></thead><tbody>" + terRows + "</tbody></table>";
+  return sopCard("How a day is judged", flow + note + simpleTable + terTable);
 }
 
 function renderSopDayTypes() {
@@ -140,18 +224,22 @@ function renderSopCoverage() {
     "<li><strong>Towns Not Visited (" + SOP.townCoverageMonths + "M)</strong> — towns in the RM's region that are not a Counted Town in any of the last " +
     SOP.townCoverageMonths + " months (selected month and the previous " + (SOP.townCoverageMonths - 1) +
     ", whatever is uploaded). Listed by territory, with which months were included.</li>" +
-    "<li><strong>Towns Repeated from Last Month</strong> — Counted Towns this month that were also Counted Towns last month. Shown as x of y towns (y = distinct Counted Towns this month). — if last month is not uploaded.</li>" +
+    "<li><strong>Towns Repeated (" + SOP.townCoverageMonths + "M)</strong> — distinct Counted Towns this month that were also Counted Towns in any of the previous " +
+    (SOP.townCoverageMonths - 1) + " months. Shown as x / y (y = distinct Counted Towns this month). " +
+    "— with “Upload earlier months to see repeats” if no earlier month exists.</li>" +
     "</ul><p class=\"muted\">Coverage uses Counted Towns only.</p>"
   );
 }
 
 function renderSopGlossary() {
   const items = [
-    ["Counted Town", "A town with ≥ " + SOP.minTownHrs + " productive hours that day. Towns under that are shown but are not a market visit and do not count as visited."],
+    ["Counted Town", "A town whose productive hours meet its territory's minimum that day: " +
+      SOP.sameTerritoryHrs + " hrs if at least " + SOP.sameTerritoryTowns + " towns in that territory reached " +
+      SOP.sameTerritoryHrs + " hrs, otherwise " + SOP.minTownHrs + " hrs. Towns under the minimum are shown but are not a market visit and do not count as visited."],
     ["Outside Base Day", "A Valid Day with at least one Counted Town that is not a base town."],
     ["Base-only Day", "A Valid Day where every Counted Town is a base town. At most " + SOP.maxBaseOnlyDays + " of these count toward target."],
     ["Base Town Visit", "A Valid Day where at least one Counted Town is a base town (info count)."],
-    ["Invalid Day", "A Market Visit day that is not Valid: total under " + SOP.minDayTotalHrs + " hrs and/or no town ≥ " + SOP.minTownHrs + " hrs."],
+    ["Invalid Day", "A Market Visit day that is not Valid: total under " + SOP.minDayTotalHrs + " hrs and/or no counted town."],
     ["Missing Day", "No row at all for that RM on a date up to Data Up To."],
     ["Data Up To", "Last date present in the uploaded visit log for that month."],
     ["Plan Deviation", "A Market Visit row where Planned Town ≠ Tracker Presence (case-insensitive, trimmed)."],

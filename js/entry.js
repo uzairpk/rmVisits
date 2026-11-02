@@ -310,7 +310,7 @@ function updateEntrySummary() {
   const tags = [];
   if (rec.isInvalid) {
     const reason = String(rec.invalidReason || "");
-    if (/No town/i.test(reason)) tags.push("No town ≥ " + SOP.minTownHrs + "h");
+    if (/No counted town/i.test(reason) || /No town/i.test(reason)) tags.push("No counted town");
     if (/Total under/i.test(reason) || /Total </i.test(reason)) tags.push("Total < " + SOP.minDayTotalHrs + "h");
   }
   const text = "Total " + formatHours(rec.dailyTotalHours) + " hrs · Prod " + formatHours(rec.dailyProdHours) +

@@ -7,6 +7,9 @@ var SOP = {
   officeWork: 4,
   plannedLeaves: 1,
   minTownHrs: 2,
+  sameTerritoryHrs: 1.5,
+  sameTerritoryTowns: 2,
+  lateStartDefault: "10:00",
   minDayTotalHrs: 5, /* earliest-to-latest total hours that day, including travel */
   maxBaseOnlyDays: 4,
   townCoverageMonths: 6,
@@ -14,8 +17,8 @@ var SOP = {
   paceOnTrackMin: 0,
   paceSlightMin: -2,
   sourceDoc: "SOPs of Monthly Market Visits for RMs/SAM – Sep 2026",
-  appVersion: "v22",
-  asOf: "Oct 2026"
+  appVersion: "v23",
+  asOf: "Nov 2026"
 };
 
 var STATUS_VISIT = "marketvisit";
@@ -159,13 +162,28 @@ function hoursBetween(startMin, endMin) {
   return round2((b - a) / 60);
 }
 
-function canonicalTown(name, territoryRows) {
+function findTerritoryTown(name, territoryRows) {
   var want = collapseSpaces(name).toLowerCase();
-  if (!want) return "";
-  var found = (territoryRows || []).find(function (t) {
+  if (!want) return null;
+  return (territoryRows || []).find(function (t) {
     return collapseSpaces(t.town).toLowerCase() === want;
-  });
+  }) || null;
+}
+
+function canonicalTown(name, territoryRows) {
+  var found = findTerritoryTown(name, territoryRows);
   return found ? found.town : collapseSpaces(name);
+}
+
+function townTerritoryCode(name, territoryRows) {
+  var found = findTerritoryTown(name, territoryRows);
+  return found ? found.territory : "";
+}
+
+function clockToMinutes(hhmm) {
+  var m = String(hhmm || "").trim().match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  return Number(m[1]) * 60 + Number(m[2]);
 }
 
 function isoFromParts(y, m, d) {
@@ -243,21 +261,48 @@ function isBaseTownName(name, baseTowns) {
   });
 }
 
-function townHoursList(visits) {
+function applyTownMinimums(list) {
+  var byTer = {};
+  (list || []).forEach(function (t) {
+    var ter = t.territory || "";
+    if (!byTer[ter]) byTer[ter] = [];
+    byTer[ter].push(t);
+  });
+  Object.keys(byTer).forEach(function (ter) {
+    var towns = byTer[ter];
+    var reached = towns.filter(function (t) {
+      return (t.hours || 0) >= SOP.sameTerritoryHrs;
+    }).length;
+    var min = reached >= SOP.sameTerritoryTowns ? SOP.sameTerritoryHrs : SOP.minTownHrs;
+    towns.forEach(function (t) {
+      t.townMinHrs = min;
+      t.counted = (t.hours || 0) >= min;
+    });
+  });
+  return list || [];
+}
+
+function townHoursList(visits, territoryRows) {
   var map = {};
   (visits || []).forEach(function (r) {
     var name = r.visitedTown;
     if (!name) return;
     var key = name.toLowerCase();
-    if (!map[key]) map[key] = { name: name, hours: 0 };
+    if (!map[key]) {
+      map[key] = {
+        name: name,
+        hours: 0,
+        territory: townTerritoryCode(name, territoryRows) || collapseSpaces(r.territory)
+      };
+    }
     map[key].hours += (r.prodHours || 0);
   });
-  return Object.keys(map).sort().map(function (k) {
+  var list = Object.keys(map).sort().map(function (k) {
     var rec = map[k];
     rec.hours = round2(rec.hours);
-    rec.counted = rec.hours >= SOP.minTownHrs;
     return rec;
   });
+  return applyTownMinimums(list);
 }
 
 function formatTownHoursText(list) {
@@ -295,6 +340,40 @@ function countedTownSetForRm(packs, rmInfo, territoryRows) {
   return seen;
 }
 
+function monthShortName(monthKey) {
+  var p = String(monthKey || "").split("-");
+  var labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return labels[Number(p[1]) - 1] || monthKey;
+}
+
+function countedTownDayMap(packs, rmInfo, territoryRows) {
+  var map = {};
+  (packs || []).forEach(function (pack) {
+    var rows = (pack.rows || []).filter(function (v) {
+      return namesLikelySame(v.matchedRmName || v.managerName, rmInfo.rmName);
+    });
+    var groups = {};
+    rows.forEach(function (raw) {
+      if (!raw.dateISO) return;
+      if (!groups[raw.dateISO]) groups[raw.dateISO] = [];
+      groups[raw.dateISO].push(raw);
+    });
+    Object.keys(groups).forEach(function (iso) {
+      var day = buildDayRecord(rmInfo.rmName, iso, groups[iso], rmInfo, territoryRows);
+      (day.countedTownList || []).forEach(function (t) {
+        var key = t.toLowerCase();
+        if (!map[key]) {
+          map[key] = { name: t, territory: townTerritoryCode(t, territoryRows), months: {}, dates: [] };
+        }
+        if (!map[key].months[pack.month]) map[key].months[pack.month] = [];
+        map[key].months[pack.month].push(iso);
+        map[key].dates.push(iso);
+      });
+    });
+  });
+  return map;
+}
+
 function monthRangeNote(months) {
   if (!months || !months.length) return "No visit months in range.";
   var names = months.map(function (k) {
@@ -329,11 +408,27 @@ function judgeTownHours(hoursList, dailyTotal) {
   if (dailyTotal == null || dailyTotal < SOP.minDayTotalHrs) {
     reasons.push("Total under " + SOP.minDayTotalHrs + " hrs");
   }
-  if (!counted) reasons.push("No town ≥ " + SOP.minTownHrs + " hrs");
+  if (!counted) reasons.push("No counted town");
   return {
     counted: counted,
     isValid: dailyTotal != null && dailyTotal >= SOP.minDayTotalHrs && counted > 0,
     reasons: reasons
+  };
+}
+
+function judgeTownRecords(towns, dailyTotal) {
+  applyTownMinimums(towns || []);
+  var counted = (towns || []).filter(function (t) { return t.counted; }).length;
+  var reasons = [];
+  if (dailyTotal == null || dailyTotal < SOP.minDayTotalHrs) {
+    reasons.push("Total under " + SOP.minDayTotalHrs + " hrs");
+  }
+  if (!counted) reasons.push("No counted town");
+  return {
+    counted: counted,
+    isValid: dailyTotal != null && dailyTotal >= SOP.minDayTotalHrs && counted > 0,
+    reasons: reasons,
+    towns: towns
   };
 }
 
@@ -457,6 +552,7 @@ function emptyDayRecord(rmName, dateISO) {
     townHours: [],
     countedTownList: [],
     visitCount: 0,
+    tripStartMin: null,
     tripStartLabel: "",
     tripEndLabel: "",
     prodStartLabel: "",
@@ -496,7 +592,7 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
   var rows = rawRows.map(function (r) { return enrichVisitRow(r, territoryRows); });
   var visits = rows.filter(function (r) { return r.isVisit; });
   var isFieldDay = visits.length > 0;
-  var townHours = townHoursList(visits);
+  var townHours = townHoursList(visits, territoryRows);
   var counted = townHours.filter(function (t) { return t.counted; });
   var towns = townHours.map(function (t) { return t.name; });
   var dailyProd = round2(townHours.reduce(function (sum, t) { return sum + (t.hours || 0); }, 0));
@@ -512,7 +608,7 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
     if (dailyTotal == null || dailyTotal < SOP.minDayTotalHrs) {
       reasons.push("Total under " + SOP.minDayTotalHrs + " hrs");
     }
-    if (!counted.length) reasons.push("No town ≥ " + SOP.minTownHrs + " hrs");
+    if (!counted.length) reasons.push("No counted town");
   }
   var valid = isFieldDay && dailyTotal != null && dailyTotal >= SOP.minDayTotalHrs && counted.length > 0;
   var type = isFieldDay ? (valid ? "Valid" : "Invalid") : nonVisitDayLabel(rows);
@@ -528,6 +624,7 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
   }));
   var remarks = uniqueSorted(rows.map(function (r) { return collapseSpaces(r.remarks); }));
   var d = parseISODate(dateISO);
+  var tripStartMin = minMins(rows, "tripStartMin");
   return {
     rmName: rmName,
     dateISO: dateISO,
@@ -539,6 +636,8 @@ function buildDayRecord(rmName, dateISO, rawRows, rmInfo, territoryRows) {
     townHours: townHours,
     countedTownList: counted.map(function (t) { return t.name; }),
     visitCount: visits.length,
+    tripStartMin: tripStartMin,
+    tripStartClock: formatMinutesAsTime(tripStartMin),
     tripStartLabel: formatMinutesAsTime(bounds ? bounds.min : null),
     tripEndLabel: formatMinutesAsTime(bounds ? bounds.max : null),
     prodStartLabel: formatMinutesAsTime(minMins(visits, "prodStartMin")),
@@ -676,11 +775,45 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
   uniqueTowns.forEach(function (t) { countedThisMonth[t.toLowerCase()] = t; });
   var rolling = rollingVisitContext(opts.allVisitPacks || [], monthKey, SOP.townCoverageMonths);
   var visited6m = countedTownSetForRm(rolling.packs, rmMasterRow, territoryRows);
-  var lastMonthKey = monthKeyAdd(monthKey, -1);
-  var lastMonthPacks = (opts.allVisitPacks || []).filter(function (p) { return p.month === lastMonthKey; });
-  var lastMonthUploaded = lastMonthPacks.length > 0;
-  var visitedLastMonth = lastMonthUploaded ? countedTownSetForRm(lastMonthPacks, rmMasterRow, territoryRows) : {};
-  var townsRepeated = uniqueTowns.filter(function (t) { return !!visitedLastMonth[t.toLowerCase()]; });
+  var priorKeys = [];
+  var pi;
+  for (pi = 1; pi < SOP.townCoverageMonths; pi++) priorKeys.push(monthKeyAdd(monthKey, -pi));
+  var priorPacks = (opts.allVisitPacks || []).filter(function (p) {
+    return priorKeys.indexOf(p.month) >= 0;
+  });
+  var priorUploaded = priorPacks.length > 0;
+  var priorTownDays = countedTownDayMap(priorPacks, rmMasterRow, territoryRows);
+  var thisTownDays = countedTownDayMap([{ month: monthKey, rows: visitRows }], rmMasterRow, territoryRows);
+  var townsRepeated = uniqueTowns.filter(function (t) { return !!priorTownDays[t.toLowerCase()]; });
+  var townsRepeatedRows = uniqueTowns.map(function (t) {
+    var key = t.toLowerCase();
+    var prior = priorTownDays[key];
+    var here = thisTownDays[key];
+    var earlier = prior ? Object.keys(prior.months).sort().map(function (mk) {
+      return monthShortName(mk) + " ×" + prior.months[mk].length;
+    }).join(", ") : "";
+    var lastBefore = "";
+    if (prior) {
+      var dates = [];
+      Object.keys(prior.months).forEach(function (mk) {
+        dates = dates.concat(prior.months[mk]);
+      });
+      dates.sort();
+      lastBefore = dates.length ? dates[dates.length - 1] : "";
+    }
+    return {
+      town: t,
+      territory: (here && here.territory) || (prior && prior.territory) || townTerritoryCode(t, territoryRows),
+      daysThisMonth: here ? here.dates.length : 0,
+      earlier: earlier || "—",
+      lastBefore: lastBefore ? formatDisplayDate(lastBefore) : "never",
+      repeated: !!prior
+    };
+  }).sort(function (a, b) {
+    if (a.repeated !== b.repeated) return a.repeated ? -1 : 1;
+    if (b.daysThisMonth !== a.daysThisMonth) return b.daysThisMonth - a.daysThisMonth;
+    return a.town.localeCompare(b.town);
+  });
   var townsNotVisited = regionTownNames.filter(function (t) {
     return !visited6m[t.toLowerCase()];
   });
@@ -769,11 +902,22 @@ function summarizeRmMonth(rmMasterRow, visitRows, territoryRows, opts) {
     townsNotVisited: townsNotVisited.length,
     townsNotVisitedList: townsNotVisited.join(", "),
     townsNotVisitedGrouped: townsNotVisitedGrouped,
+    townsNotVisitedGroups: Object.keys(byTerritory).sort().map(function (ter) {
+      return { territory: ter, towns: byTerritory[ter] };
+    }),
     townsNotVisitedNote: monthRangeNote(rolling.months || []),
-    townsRepeated: lastMonthUploaded ? townsRepeated.length : null,
+    regionTerritories: territories,
+    territoriesVisited: territories.filter(function (ter) {
+      return territoriesNotVisited.indexOf(ter) < 0;
+    }),
+    townsRepeated: priorUploaded ? townsRepeated.length : null,
     townsRepeatedList: townsRepeated.join(", "),
-    townsRepeatedLabel: lastMonthUploaded ? (townsRepeated.length + " / " + uniqueTowns.length) : "—",
-    lastMonthUploaded: lastMonthUploaded,
+    townsRepeatedLabel: priorUploaded ? (townsRepeated.length + " / " + uniqueTowns.length) : "—",
+    townsRepeatedNote: priorUploaded ? "" : "Upload earlier months to see repeats",
+    townsRepeatedRows: townsRepeatedRows,
+    townsNewCount: uniqueTowns.length - townsRepeated.length,
+    lastMonthUploaded: priorUploaded,
+    priorMonthsUploaded: priorUploaded,
     regionTownCount: regionTownNames.length,
     townsVisitedInRegionCount: townsVisitedInRegion.length,
     coveragePct: regionTownNames.length ? pct(townsVisitedInRegion.length, regionTownNames.length) : null,

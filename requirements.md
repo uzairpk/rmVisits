@@ -69,6 +69,9 @@ The header row may not be row 1 – detect the row that contains these headers. 
 - Market visit days: **18** (default target; actual target comes from RM master)
 - Meetings: **3** · Planning / Office Work: **4** · Leaves: **1**
 - Minimum productive hours **per town**: **2**
+- **Same-territory rule** (Management instruction, Nov 2026): minimum **1.5** hrs per town in a territory where at least
+  **2** towns reached 1.5 hrs that day (constants: 1.5 hrs, 2 towns)
+- **Late start** default threshold: **10:00** (user can change it on the dashboard; see 5.0)
 - Minimum **total** hours **per day** (first start to last end, incl. travel): **5**
 - Maximum **base-only days** counted toward target: **4**
 - All territories of the region must be visited **once a month**
@@ -85,15 +88,30 @@ The header row may not be row 1 – detect the row that contains these headers. 
 **Town level (Market Visit rows only):**
 - **Town Productive Hrs** = sum of productive time of all rows for that town that day
   (same town on 2 rows is added together, e.g. 1.0 + 1.5 = 2.5 hrs)
-- **Counted Town** = town with Town Productive Hrs ≥ 2. Towns under 2 hrs are shown but are NOT a market visit,
-  and do NOT count as "visited" anywhere (coverage, territories, repeated towns, base town).
+- **Town minimum (per territory, per day)** – same-territory rule (Management instruction, Nov 2026):
+  1. Group the day's towns by territory (from the territory structure).
+  2. In a territory where **at least 2 towns have ≥ 1.5 productive hrs** that day → minimum = **1.5 hrs** for its towns.
+  3. Otherwise (single town in that territory, or only one town reached 1.5) → minimum = **2 hrs**.
+  This works per territory, so one day can have a 1.5 hrs territory and a 2 hrs territory.
+- **Counted Town** = town with Town Productive Hrs ≥ its town minimum (≥, so exactly 1.50 counts).
+  Towns below their minimum are shown but are NOT a market visit, and do NOT count as "visited" anywhere
+  (coverage, territories, repeated towns, base town).
+- Examples (all with day total ≥ 5 unless stated):
+  | Towns (territory: hrs) | Minimum per territory | Counted | Day |
+  |---|---|---|---|
+  | JLM: Jhelum 1.88, Lalamusa 2.97 | JLM 1.5 | 2 | Valid |
+  | PSW: Nowshera 1.58, Peshawar 1.25 | PSW 2 (only one town ≥ 1.5) | 0 | Invalid – No counted town |
+  | SKG: Daska 1.50, Pasroor 0.93, Qila Kalar 3.08 | SKG 1.5 | 2 (Pasroor not) | Valid |
+  | FSD: FSD-3 1.6, FSD-4 1.7 · CHN: Chiniot 2.2 · JHG: Jhang 1.8 | FSD 1.5, CHN 2, JHG 2 | 3 (Jhang not) | Valid |
+  | KWL: Kacha Khu 1.7, Vejianwala 1.6 – day total 4.6 | KWL 1.5 | 2 | Invalid – Total < 5h |
+  | SKT: Sialkot 1.8 | SKT 2 | 0 | Invalid – No counted town |
 
 **Day level:**
 - **Daily Productive Time** = sum of Town Productive Hrs of ALL towns that day (including towns under 2 hrs)
 - **Daily Total Hrs** = from the EARLIEST to the LATEST time that day (see "Time and distance" below), incl. travel
 - **Valid Day** = Daily Total Hrs ≥ 5 AND at least one Counted Town (town with ≥ 2 PRODUCTIVE hrs)
 - **Invalid Day** = a Market Visit day that is not valid. Reason shown:
-  "Total under 5 hrs" and/or "No town ≥ 2 hrs"
+  "Total under 5 hrs" and/or "No counted town"
 - The 2 hrs per town rule is always on PRODUCTIVE time; the 5 hrs per day rule is on TOTAL time.
 - Examples:
   | Town productive hrs | Daily total hrs (incl. travel) | Counted towns | Result |
@@ -156,13 +174,18 @@ The header row may not be row 1 – detect the row that contains these headers. 
 - **Towns Not Visited (6M)** = towns in the RM's region that are not a Counted Town in ANY of the last 6 months
   (selected month M and M−1 … M−5, whatever is uploaded). Show "x of y" and the list grouped by territory,
   plus which months were included (e.g. "Based on May–Oct" or "Based on Oct only").
-- **Towns Repeated from Last Month** = Counted Towns this month that were also Counted Towns last month.
-  Show "x of y towns" (y = distinct Counted Towns this month). "—" if last month not uploaded.
+- **Towns Repeated (6M)** = distinct Counted Towns this month that were ALSO Counted Towns in any of the previous
+  5 months (M−1 … M−5, whatever exists). Show "x / y" (y = distinct Counted Towns this month).
+  "—" with note "Upload earlier months to see repeats" if no earlier month exists.
+- **New Towns** = y − x (counted this month, not counted in the previous 5 months).
 
 ## 5. Dashboard
 
 ### 5.0 General
 - Filters: Month, Zone, Region, RM
+- Dashboard controls (top bar, apply to ALL RM cards, remembered in the browser):
+  - **Late start after: [HH:MM]** (24h time picker, default 10:00)
+  - **Show start time** toggle (on by default)
 - Dark theme (keep current look).
 - Every card, table and chart has a **Copy image** button (top-right icon). It copies a clean PNG of just that block
   to the clipboard so it can be pasted straight into WhatsApp. Show a small "Copied ✓" message.
@@ -196,25 +219,44 @@ The header row may not be row 1 – detect the row that contains these headers. 
 
 ### 5.4 RM Cards (one per RM, in a grid – WhatsApp-ready)
 - Fixed width 560px (never stretched); 2–3 cards per row on a big screen.
-- Coloured header only: RM name, Region · Month, Base town(s), "Data up to <date>".
+- Coloured header only:
+  - RM name
+  - **Region · Month (territory list)** on one line, e.g. "CEN · Oct 2026 (CHN, FSD, GOR, JHG, JRW, KRW, NNK, SGD, TDW, TTS)".
+    All territories of the RM's region, alphabetical, by code. Visited (≥ 1 Counted Town this month) in GREEN,
+    not visited in RED. Colours must stay readable on every header colour (use a dark chip/pill behind each code if needed).
+  - Base town(s), "Data up to <date>".
   Header colour follows Pace (green On track, amber Slightly behind, red Behind).
   At month end (Data Up To = last day of month) colour by Ach %: green ≥ 100%, amber 70–99%, red < 70%.
 - KPI block in 2 columns (label | value), equal number of rows on each side:
   - Left: Target, Adjusted Target, Expected by Now, **Achieved**, **Ach %**, **Pace**, Outside Base Days,
     Base-only Days (e.g. "5 · 4 counted"), Base Town Visits, Avg Prod Hrs / day, Total KMs
-  - Right: Invalid Days, Leaves (x / 1), Holidays, Office Work (x / 4), Meetings (x / 3), Transit, Missing Days,
-    Territories Not Visited (x / y), Towns Not Visited 6M (x / y), Towns Repeated (x / y), Avg KMs / visit day
+  - Right: Invalid Days, Leaves (x / 1), Holidays, Office Work (x / 4), Meetings (x / 3), Transit,
+    **Late Starts (≥ HH:MM)** (label shows the dashboard time, e.g. "Late Starts (≥ 10:00)"),
+    Territories Not Visited (x / y), Towns Not Visited 6M (x / y), Towns Repeated 6M (x / y), Avg KMs / visit day
+  - Missing Days is removed from the card (it stays in the Alerts panel).
+  - **Late Starts** = Field days (with a Market Visit) whose Trip Start ≥ the dashboard "Late start after" time.
   - "actual / SOP" values turn red when actual is over SOP.
   - Achieved, Ach % and Pace bold and slightly larger.
+- **Clickable counts (view only, pop-up with its own Copy image button; not part of the card image):**
+  - **Towns Not Visited 6M** → list of those towns grouped by territory, plus "Based on <months>".
+  - **Towns Repeated 6M** → table: Town | Territory | Days this month | Earlier visits (e.g. "Aug ×1, Sep ×2") |
+    Last visit before this month. Repeated towns first (most earlier visits first), then a "New this month (n)" section
+    with "—" / "never".
+  - **Late Starts** → list of dates with their start time.
+  - Clickable values look subtly clickable (underline on hover, pointer cursor).
 - Day table (Market Visit days only – Valid / Invalid):
-  Date | Towns | # | KMs | Prod | Travel | Total   (short headers on ONE line; no note under the table)
-  - Towns: show each town with its hours, e.g. "FSD-3 (2.5), Chiniot (3.0), Dijkot (1.0)".
-    Counted towns (≥ 2 productive hrs): name and hours in GREEN.
-    Towns under 2 hrs (not counted): name and hours in SOFT RED (easy to read on dark background).
-    Base towns marked with a small "B".
+  Date | Start | Towns | # | KMs | Prod | Travel | Total   (short headers on ONE line; no note under the table)
+  - **Start** = Trip Start "HH:MM" (24h). Shown in AMBER when ≥ the late-start time. Column hidden when the
+    "Show start time" toggle is off (also hidden in the copied image).
+  - **Towns**: each town with its hours and its territory code in front:
+    - one town in a territory: "GOR: samundari-N (2.12)"
+    - 2+ towns in the same territory, grouped with the territory total: "FSD (3.66): FSD-3ᴮ (2.73), FSD-4 (0.93)"
+    - several territories separated by " · ": "KRW: Dijkot (1.25) · GOR: samundari-N (2.12)"
+    - Territory code in a neutral colour; towns GREEN if counted (≥ their minimum, see 4.2), SOFT RED if not.
+    - Base towns marked with a small "B".
   - # = Counted Towns that day.
-  - TOTAL coloured green if the day is Valid, red if Invalid (TOTAL decides validity). PROD and TRAVEL plain.
-  - Invalid rows: after the towns, a small red tag with the reason: "No town ≥ 2h" and/or "Total < 5h".
+  - TOTAL coloured green if the day is Valid, red if Invalid. PROD and TRAVEL plain.
+  - Invalid rows: after the towns, a small red tag with the reason: "No counted town" and/or "Total < 5h".
   - Headers and numbers never wrap; only Towns may wrap and gets the remaining width.
   - Bold Totals row: # = DISTINCT Counted Towns in the month; KMs and hours = sums.
 - Own Copy image button.
@@ -224,7 +266,7 @@ Columns (in this order):
 | Column | Content |
 |---|---|
 | Date | "01-Oct Thu" (no separate Day column) |
-| Status | Valid / Invalid · reason ("Total < 5 hrs", "No town ≥ 2 hrs") / Leave / Holiday / Meeting / Office Work / Transit / No entry |
+| Status | Valid / Invalid · reason ("Total < 5 hrs", "No counted town") / Leave / Holiday / Meeting / Office Work / Transit / No entry |
 | Towns | each town with its productive hrs; counted towns (≥ 2 hrs) green, under 2 hrs soft red; base towns marked "B" |
 | Trip | "12:13–17:05" (first start – last end of the day) |
 | Prod | "12:41–16:11" (first prod start – last prod end) |
@@ -254,7 +296,7 @@ Columns (in this order):
 - One title per panel with count badge, month and "Data up to" date (no duplicate titles).
 - **Missing days**: only up to Data Up To, never up to today.
 - **Invalid days**: each line = RM name, then "12-Oct Mon · Towns (hrs each) · 2.66 hrs productive · 3.83 hrs total",
-  the reason ("Total under 5 hrs" / "No town ≥ 2 hrs"), and Remarks in italics underneath if any.
+  the reason ("Total under 5 hrs" / "No counted town"), and Remarks in italics underneath if any.
 - **Base-only days over 4**: RM, count, dates not counted.
 - **Territories not visited this month**: RM and territory names.
 - **Over SOP**: RMs with Meetings > 3, Office Work > 4 or Leaves > 1.
@@ -309,7 +351,7 @@ Each line:
 - Warn (allow): the same RM + date already exists in uploaded data.
 - Live summary at the bottom: neutral grey "Enter trip and prod times to see result" until Trip Start/End and at least
   one Market Visit with Prod times are filled. Then, using section 4 rules:
-  "Total 8.1 hrs · Prod 5.75 · 2 towns counted · ✅ Valid" or "❌ Invalid – No town ≥ 2h / Total < 5h".
+  "Total 8.1 hrs · Prod 5.75 · 2 towns counted · ✅ Valid" or "❌ Invalid – No counted town / Total < 5h".
 - Buttons: Submit (saves the whole day) and Cancel.
 
 **How a mixed day counts**
@@ -349,9 +391,11 @@ Purpose: show everyone exactly which SOP rules the app applies and how every num
    Min productive hrs per town 2 · Min total hrs per day 5 · Max base-only days counted 4 ·
    All territories once a month · All towns once in 6 months.
 3. **How a day is judged** – step-by-step flow:
-   Market Visit day? → which towns have ≥ 2 productive hrs (Counted Towns) → at least one? → day total hrs
+   Market Visit day? → group towns by territory → set each territory's town minimum (1.5 hrs if ≥ 2 towns there reached
+   1.5 hrs, else 2 hrs) → which towns meet their minimum (Counted Towns) → at least one? → day total hrs
    (first start to last end, incl. travel) ≥ 5? → Valid / Invalid (with reason).
-   Worked examples table (same as section 4.2).
+   Worked examples table (same as section 4.2), including the same-territory rule examples, labelled
+   "Same-territory rule – Management instruction, Nov 2026".
 4. **Day types and priority**: Valid/Invalid, Leave, Holiday, Meeting, Office Work, Transit, Missing – and that a day
    is counted once only (mixed days = market visit day).
 5. **Monthly formulas** with examples:
@@ -402,3 +446,8 @@ Purpose: show everyone exactly which SOP rules the app applies and how every num
 3. Dashboard (section 5)
 4. Reports + Excel/PDF export (section 6)
 5. Later (optional): shared online version with login and central database
+
+## Change log
+| Date | Change |
+|---|---|
+| 02-Nov-2026 | v23: same-territory 1.5 hrs rule (per territory, needs 2 towns ≥ 1.5); RM card: territory list in header, territory codes in Towns, Start column + toggle, Late Starts replaces Missing Days, Towns Repeated over 6M, clickable Towns Not Visited / Repeated / Late Starts |

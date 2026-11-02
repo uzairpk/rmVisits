@@ -52,7 +52,7 @@ const RANK_COLS = [
   { key: "missingDays", label: "Missing" },
   { key: "territoriesNotVisited", label: "Terr. not vis." },
   { key: "townsNotVisited", label: "Towns not vis. (6M)" },
-  { key: "townsRepeated", label: "Towns repeated" },
+  { key: "townsRepeated", label: "Towns repeated 6M" },
   { key: "planAdherencePct", label: "Plan %" },
   { key: "avgProdHours", label: "Avg prod hrs", num: true },
   { key: "totalKms", label: "Total KMs", num: true },
@@ -201,6 +201,7 @@ function isoDate(y, m, d) {
 }
 
 async function refreshDashboard() {
+  applyDashPrefsToForm();
   dashCache.visits = await getAllVisitLogs();
   dashCache.rms = await getAllRmMaster();
   const terr = await getTerritory();
@@ -323,8 +324,8 @@ function drawKpis(rows) {
   const barCls = achievementClass(pctVal);
   const items = [
     kpiHtml("Achieved vs adj. target", (achieved + " / " + adj), formatPct(pctVal) + " · exp. " + expected, barCls, pctVal),
-    kpiHtml("Valid days", String(valid), "≥ " + SOP.minDayTotalHrs + " total hrs and a town ≥ " + SOP.minTownHrs + " prod hrs"),
-    kpiHtml("Invalid days", String(sum(rows, "invalidDays")), "Total under " + SOP.minDayTotalHrs + " hrs and/or no town ≥ " + SOP.minTownHrs, "kpi-bad"),
+    kpiHtml("Valid days", String(valid), "≥ " + SOP.minDayTotalHrs + " total hrs and at least one counted town"),
+    kpiHtml("Invalid days", String(sum(rows, "invalidDays")), "Total under " + SOP.minDayTotalHrs + " hrs and/or no counted town", "kpi-bad"),
     kpiHtml("Total visits", String(visits), "Counted towns across days"),
     kpiHtml("Outside Base days", String(sum(rows, "outsideBaseDays")), "Valid days with a non-base counted town"),
     kpiHtml("Base-only counted", String(sum(rows, "baseOnlyCounted")), "Cap " + SOP.maxBaseOnlyDays + " toward target"),
@@ -733,22 +734,101 @@ function kpiPair(label, value, hi, over) {
     "</dt><dd>" + escapeHtml(value == null || value === "" ? "—" : value) + "</dd></div>";
 }
 
+function kpiPop(label, value, kind, rmName, hi, over) {
+  return '<div class="rm-kpi-row' + (hi ? " hi" : "") + (over ? " sop-over" : "") + '"><dt>' + escapeHtml(label) +
+    '</dt><dd><button type="button" class="rm-pop" data-kind="' + kind + '" data-rm="' +
+    escapeHtml(rmName) + '">' + escapeHtml(value == null || value === "" ? "—" : value) + "</button></dd></div>";
+}
+
 function townHoursHtml(list, baseTowns) {
+  return formatTownsGroupedHtml(list, baseTowns);
+}
+
+function formatTownsGroupedHtml(list, baseTowns) {
   if (!list || !list.length) return "—";
-  return list.map((t) => {
-    const tone = t.counted ? " town-ok" : " town-low";
-    const mark = isBaseTownName(t.name, baseTowns) ? '<sup class="town-b">B</sup>' : "";
-    return '<span class="town-chip' + tone + '">' + escapeHtml(t.name) + mark + " (" + formatHours(t.hours) + ")</span>";
-  }).join(", ");
+  const groups = {};
+  list.forEach((t) => {
+    const ter = t.territory || "—";
+    if (!groups[ter]) groups[ter] = [];
+    groups[ter].push(t);
+  });
+  return Object.keys(groups).sort().map((ter) => {
+    const towns = groups[ter].slice().sort((a, b) => a.name.localeCompare(b.name));
+    const chips = towns.map((t) => {
+      const tone = t.counted ? "town-ok" : "town-low";
+      const mark = isBaseTownName(t.name, baseTowns) ? '<sup class="town-b">B</sup>' : "";
+      return '<span class="' + tone + '">' + escapeHtml(t.name) + mark + " (" + formatHours(t.hours) + ")</span>";
+    }).join(", ");
+    if (towns.length === 1) {
+      return '<span class="tty-code">' + escapeHtml(ter) + ":</span> " + chips;
+    }
+    const tot = round2(towns.reduce((n, t) => n + (t.hours || 0), 0));
+    return '<span class="tty-code">' + escapeHtml(ter) + " (" + formatHours(tot) + "):</span> " + chips;
+  }).join(" · ");
 }
 
 function invalidReasonTags(d) {
   if (!d || !d.isInvalid) return "";
   const tags = [];
   const reason = String(d.invalidReason || "");
-  if (/No town/i.test(reason)) tags.push("No town ≥ 2h");
-  if (/Total under/i.test(reason) || /Total </i.test(reason)) tags.push("Total < 5h");
+  if (/No counted town/i.test(reason) || /No town/i.test(reason)) tags.push("No counted town");
+  if (/Total under/i.test(reason) || /Total </i.test(reason)) tags.push("Total < " + SOP.minDayTotalHrs + "h");
   return tags.map((t) => '<span class="reason-tag">' + escapeHtml(t) + "</span>").join("");
+}
+
+const DASH_PREFS_KEY = "rmVisits.dashPrefs";
+
+function loadDashPrefs() {
+  let late = SOP.lateStartDefault;
+  let show = true;
+  try {
+    const raw = JSON.parse(localStorage.getItem(DASH_PREFS_KEY) || "{}");
+    if (raw.lateStart) late = raw.lateStart;
+    if (raw.showStart === false) show = false;
+  } catch (err) { /* keep defaults */ }
+  return { lateStart: late, showStart: show };
+}
+
+function saveDashPrefs(prefs) {
+  localStorage.setItem(DASH_PREFS_KEY, JSON.stringify(prefs));
+}
+
+function getDashPrefs() {
+  const lateEl = document.getElementById("dash-late-start");
+  const showEl = document.getElementById("dash-show-start");
+  return {
+    lateStart: (lateEl && lateEl.value) || SOP.lateStartDefault,
+    showStart: showEl ? !!showEl.checked : true
+  };
+}
+
+function applyDashPrefsToForm() {
+  const prefs = loadDashPrefs();
+  const lateEl = document.getElementById("dash-late-start");
+  const showEl = document.getElementById("dash-show-start");
+  if (lateEl) lateEl.value = prefs.lateStart;
+  if (showEl) showEl.checked = prefs.showStart;
+}
+
+function lateStartMinutes(prefs) {
+  return clockToMinutes((prefs && prefs.lateStart) || SOP.lateStartDefault) || 10 * 60;
+}
+
+function isLateStartDay(d, prefs) {
+  if (!d || !d.isFieldDay) return false;
+  if (d.tripStartMin == null) return false;
+  return d.tripStartMin >= lateStartMinutes(prefs);
+}
+
+function territoryHeaderHtml(s, month) {
+  const visited = {};
+  (s.territoriesVisited || []).forEach((t) => { visited[String(t).toLowerCase()] = true; });
+  const chips = (s.regionTerritories || []).map((code) => {
+    const ok = !!visited[String(code).toLowerCase()];
+    return '<span class="tty-chip ' + (ok ? "tty-ok" : "tty-miss") + '">' + escapeHtml(code) + "</span>";
+  }).join(" ");
+  return escapeHtml(s.region || "—") + " · " + escapeHtml(month) +
+    (chips ? " (" + chips + ")" : "");
 }
 
 function xy(part, whole) {
@@ -759,9 +839,13 @@ function xy(part, whole) {
 function drawRmCards(rows, pack) {
   const grid = document.getElementById("rm-card-grid");
   const month = monthPretty(pack.month);
+  const prefs = getDashPrefs();
+  const lateLabel = prefs.lateStart || SOP.lateStartDefault;
+  const hideStart = !prefs.showStart;
   grid.innerHTML = rows.filter((s) => !s.unmatched).map((s) => {
     const headCls = rmCardHeadClass(s, pack.month);
     const upto = s.dataUpTo || dashCache.dataUpTo;
+    const lateDays = (s.days || []).filter((d) => isLateStartDay(d, prefs));
     const left = [
       kpiPair("Target", s.target),
       kpiPair("Adjusted Target", s.adjustedTarget),
@@ -782,10 +866,10 @@ function drawRmCards(rows, pack) {
       kpiPair("Office Work", s.officeSopLabel, false, s.officeOverSop),
       kpiPair("Meetings", s.meetingsSopLabel, false, s.meetingsOverSop),
       kpiPair("Transit", s.transitDays),
-      kpiPair("Missing Days", s.missingDays),
+      kpiPop("Late Starts (≥ " + lateLabel + ")", lateDays.length, "late", s.rmName),
       kpiPair("Territories Not Visited", xy(s.territoriesNotVisited, s.territoryCount)),
-      kpiPair("Towns Not Visited 6M", xy(s.townsNotVisited, s.regionTownCount)),
-      kpiPair("Towns Repeated", s.townsRepeatedLabel),
+      kpiPop("Towns Not Visited 6M", xy(s.townsNotVisited, s.regionTownCount), "notvisited", s.rmName),
+      kpiPop("Towns Repeated 6M", s.townsRepeatedLabel, "repeated", s.rmName),
       kpiPair("Avg KMs / visit day", s.avgKmsPerVisitDayLabel)
     ].join("");
     const visitDays = (s.days || []).filter((d) => d.isValid || d.isInvalid);
@@ -795,7 +879,10 @@ function drawRmCards(rows, pack) {
     const dayRows = visitDays.map((d) => {
       const totalTone = d.isValid ? "hrs-green" : "hrs-red";
       const travelCls = d.travelClamped ? "hrs-flag" : "";
+      const startLate = isLateStartDay(d, prefs);
+      const start = d.tripStartClock || "";
       return "<tr><td class=\"rm-day-date\">" + escapeHtml(formatDisplayDate(d.dateISO)) +
+        "</td><td class=\"rm-col-start" + (startLate ? " start-late" : "") + "\">" + escapeHtml(start) +
         "</td><td class=\"rm-day-towns\">" + townHoursHtml(d.townHours, s.baseTowns) +
         invalidReasonTags(d) + "</td>" +
         numCell("", d.townCount) +
@@ -804,8 +891,9 @@ function drawRmCards(rows, pack) {
         numCell(travelCls, formatHours(d.dailyTravelHours), d.travelClamped ? "Productive hours exceeded the day span; travel shown as 0" : "") +
         numCell(totalTone, formatHours(d.dailyTotalHours)) + "</tr>";
     }).join("");
+    const colCount = hideStart ? 7 : 8;
     const foot = visitDays.length
-      ? "<tfoot><tr class=\"rm-day-totals\"><td>Totals</td><td></td>" +
+      ? "<tfoot><tr class=\"rm-day-totals\"><td>Totals</td><td class=\"rm-col-start\"></td><td></td>" +
         numCell("", s.uniqueTownsVisited) +
         numCell("", formatKms(s.visitKms)) +
         numCell("", formatHours(totProd)) +
@@ -814,17 +902,80 @@ function drawRmCards(rows, pack) {
       : "";
     return '<article class="card rm-report-card" data-copy-title="' + escapeHtml(s.rmName) + '">' +
       '<header class="rm-card-head ' + headCls + '"><div class="rm-card-name">' + escapeHtml(s.rmName) +
-      "</div><div class=\"rm-card-sub\">" + escapeHtml(s.region || "—") + " · " + escapeHtml(month) +
+      "</div><div class=\"rm-card-sub rm-card-territories\">" + territoryHeaderHtml(s, month) +
       "</div><div class=\"rm-card-sub\">Base " + escapeHtml(s.baseTown || "—") +
       "</div><div class=\"rm-card-upto\">Data up to " + escapeHtml(upto ? formatDisplayDate(upto) : "—") +
       "</div></header><div class=\"rm-card-body\"><div class=\"rm-kpis\"><div class=\"rm-kpi-col\">" +
       left + "</div><div class=\"rm-kpi-col\">" + right + "</div></div>" +
-      '<table class="rm-days"><thead><tr><th>Date</th><th>Towns</th><th class="rm-num">#</th>' +
+      '<table class="rm-days' + (hideStart ? " hide-start" : "") + '"><thead><tr><th>Date</th>' +
+      '<th class="rm-col-start">Start</th><th>Towns</th><th class="rm-num">#</th>' +
       '<th class="rm-num">KMs</th><th class="rm-num">Prod</th><th class="rm-num">Travel</th>' +
       '<th class="rm-num">Total</th></tr></thead><tbody>' +
-      (dayRows || '<tr><td colspan="7" class="rm-day-empty">No field days</td></tr>') +
+      (dayRows || '<tr><td colspan="' + colCount + '" class="rm-day-empty">No field days</td></tr>') +
       "</tbody>" + foot + "</table></div></article>";
   }).join("");
+}
+
+function findSummary(rmName) {
+  return (dashCache.filtered || []).find((s) => s.rmName === rmName) ||
+    (dashCache.summaries || []).find((s) => s.rmName === rmName);
+}
+
+function openInfoModal(title, html) {
+  const modal = document.getElementById("info-modal");
+  const card = document.getElementById("info-card");
+  document.getElementById("info-title").textContent = title;
+  document.getElementById("info-body").innerHTML = html;
+  card.setAttribute("data-copy-title", title);
+  card.querySelectorAll(".copy-img-btn").forEach((el) => el.remove());
+  modal.hidden = false;
+  wireCopyButtons(card);
+}
+
+function closeInfoModal() {
+  document.getElementById("info-modal").hidden = true;
+}
+
+function openCardPopup(kind, rmName) {
+  const s = findSummary(rmName);
+  if (!s) return;
+  const prefs = getDashPrefs();
+  if (kind === "notvisited") {
+    const groups = (s.townsNotVisitedGroups || []).map((g) =>
+      "<p><strong>" + escapeHtml(g.territory) + "</strong><br>" + escapeHtml((g.towns || []).join(", ")) + "</p>"
+    ).join("") || "<p class=\"muted\">None.</p>";
+    openInfoModal(s.rmName + " · Towns Not Visited 6M",
+      "<p class=\"muted\">" + escapeHtml(xy(s.townsNotVisited, s.regionTownCount)) +
+      (s.townsNotVisitedNote ? " · " + s.townsNotVisitedNote : "") + "</p>" + groups);
+    return;
+  }
+  if (kind === "repeated") {
+    const note = s.townsRepeatedNote
+      ? "<p class=\"muted\">" + escapeHtml(s.townsRepeatedNote) + "</p>"
+      : "<p class=\"muted\">" + escapeHtml(s.townsRepeatedLabel) + "</p>";
+    const repeated = (s.townsRepeatedRows || []).filter((r) => r.repeated);
+    const fresh = (s.townsRepeatedRows || []).filter((r) => !r.repeated);
+    const rowHtml = (r) => "<tr><td>" + escapeHtml(r.town) + "</td><td>" + escapeHtml(r.territory || "") +
+      "</td><td class=\"num-cell\">" + r.daysThisMonth + "</td><td>" + escapeHtml(r.earlier) +
+      "</td><td>" + escapeHtml(r.lastBefore) + "</td></tr>";
+    const table = (rows) => rows.length
+      ? '<table class="data sop-table"><thead><tr><th>Town</th><th>Territory</th><th>Days this month</th>' +
+        "<th>Earlier visits</th><th>Last visit before this month</th></tr></thead><tbody>" +
+        rows.map(rowHtml).join("") + "</tbody></table>"
+      : "<p class=\"muted\">None.</p>";
+    openInfoModal(s.rmName + " · Towns Repeated 6M",
+      note + table(repeated) + "<h3>New this month (" + (s.townsNewCount || 0) + ")</h3>" + table(fresh));
+    return;
+  }
+  if (kind === "late") {
+    const lateDays = (s.days || []).filter((d) => isLateStartDay(d, prefs));
+    const list = lateDays.length
+      ? "<ul class=\"sop-list\">" + lateDays.map((d) =>
+        "<li>" + escapeHtml(formatDisplayDate(d.dateISO)) + " · " + escapeHtml(d.tripStartClock || "") + "</li>"
+      ).join("") + "</ul>"
+      : "<p class=\"muted\">None.</p>";
+    openInfoModal(s.rmName + " · Late Starts (≥ " + (prefs.lateStart || SOP.lateStartDefault) + ")", list);
+  }
 }
 
 function drawRanking(rows) {
@@ -925,7 +1076,7 @@ function drawMonthComparison(filtered) {
     { key: "meetingDays", label: "Meetings", invert: false },
     { key: "territoriesNotVisited", label: "Territories not visited", invert: true },
     { key: "townsNotVisited", label: "Towns not visited (6M)", invert: true },
-    { key: "townsRepeated", label: "Towns repeated", invert: true },
+    { key: "townsRepeated", label: "Towns repeated 6M", invert: true },
     { key: "avgProdHours", label: "Avg prod hrs", invert: false, hrs: true },
     { key: "totalKms", label: "Total KMs", invert: false, kms: true }
   ];
@@ -1102,7 +1253,10 @@ function wireCopyButtons(root) {
     ? document.querySelector(root)
     : (root || document.getElementById("dash-body"));
   if (!scope) return;
-  scope.querySelectorAll(".card").forEach((card) => {
+  const cards = [];
+  if (scope.classList && scope.classList.contains("card")) cards.push(scope);
+  scope.querySelectorAll(".card").forEach((c) => cards.push(c));
+  cards.forEach((card) => {
     if (card.querySelector(".copy-img-btn")) return;
     card.classList.add("has-copy");
     const btn = document.createElement("button");
@@ -1222,4 +1376,29 @@ document.getElementById("filter-zone").addEventListener("change", drawDashboard)
 document.getElementById("filter-region").addEventListener("change", drawDashboard);
 document.getElementById("filter-rm").addEventListener("change", drawDashboard);
 document.getElementById("dash-rm").addEventListener("change", drawDayDetail);
+document.getElementById("dash-late-start").addEventListener("change", () => {
+  saveDashPrefs(getDashPrefs());
+  drawDashboard();
+});
+document.getElementById("dash-show-start").addEventListener("change", () => {
+  saveDashPrefs(getDashPrefs());
+  drawDashboard();
+});
+document.getElementById("dash-filters").addEventListener("click", (evt) => {
+  const pick = evt.target.closest(".dt-open");
+  if (!pick) return;
+  const input = pick.parentElement && pick.parentElement.querySelector("input");
+  if (input && typeof input.showPicker === "function") {
+    try { input.showPicker(); } catch (err) { input.focus(); }
+  } else if (input) input.focus();
+});
+document.getElementById("rm-card-grid").addEventListener("click", (evt) => {
+  const btn = evt.target.closest(".rm-pop");
+  if (!btn) return;
+  openCardPopup(btn.dataset.kind, btn.dataset.rm);
+});
+document.getElementById("info-close").addEventListener("click", closeInfoModal);
+document.getElementById("info-modal").addEventListener("click", (evt) => {
+  if (evt.target.id === "info-modal") closeInfoModal();
+});
 refreshDashboard();
