@@ -522,11 +522,33 @@ td.type-invalid { color: var(--danger); font-weight: 700; }
 .capturing table.day-detail td { overflow: visible; }
 .copy-stage {
   position: fixed;
-  left: 0;
+  left: -10000px;
   top: 0;
-  z-index: 2147483000;
+  z-index: -1;
   pointer-events: none;
   background: #0e1522;
+  max-height: none;
+  overflow: visible;
+  width: max-content;
+  height: max-content;
+}
+.copy-stage,
+.copy-stage * {
+  max-height: none !important;
+  overflow: visible !important;
+}
+.copy-stage .capturing {
+  height: auto !important;
+}
+.copy-stage .rm-report-card {
+  overflow: hidden !important;
+  width: 640px !important;
+  max-width: 640px !important;
+}
+.copy-stage .rm-days {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
 }
 
 .date-grid-scroll { overflow: hidden; }
@@ -580,9 +602,9 @@ td.type-invalid { color: var(--danger); font-weight: 700; }
   align-items: start;
 }
 .rm-report-card {
-  width: 600px;
-  max-width: 600px;
-  flex: 0 0 600px;
+  width: 640px;
+  max-width: 640px;
+  flex: 0 0 640px;
   padding: 0;
   overflow: hidden;
   box-sizing: border-box;
@@ -595,21 +617,12 @@ td.type-invalid { color: var(--danger); font-weight: 700; }
 .rm-card-head.ach-amber { background: #fbbf24; }
 .rm-card-head.ach-red { background: #f87171; color: #1a0b0b; }
 .rm-card-name { font-weight: 800; font-size: 1.08rem; line-height: 1.2; padding-right: 92px; }
-.rm-card-sub { font-size: 0.78rem; opacity: 0.92; margin-top: 2px; }
-.rm-card-territories { line-height: 1.55; }
-.tty-chip {
-  display: inline-block;
-  padding: 0 5px;
-  margin: 1px 1px 0 0;
-  border-radius: 6px;
-  font-weight: 800;
-  font-size: 0.72rem;
-  letter-spacing: 0.02em;
-}
-.tty-ok { background: #064e3b; color: #6ee7b7; }
-.tty-miss { background: #3f0d0d; color: #fca5a5; }
+.rm-card-sub { font-size: 0.78rem; font-weight: 400; opacity: 0.92; margin-top: 2px; }
+.rm-card-territories { line-height: 1.35; font-weight: 400; opacity: 1; }
+.tty-ok-text { color: #166534; font-weight: 400; }
+.tty-miss-text { color: #9f1239; font-weight: 400; }
 .rm-card-upto { font-size: 0.7rem; opacity: 0.8; margin-top: 3px; }
-.rm-card-body { padding: 8px 10px 10px; overflow: hidden; }
+.rm-card-body { padding: 8px 10px 10px; overflow: hidden; min-width: 0; }
 .rm-kpis {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -647,15 +660,27 @@ td.type-invalid { color: var(--danger); font-weight: 700; }
 }
 .rm-days {
   width: 100%;
+  max-width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.68rem;
+  box-sizing: border-box;
 }
+.rm-days col.rm-col-date { width: 76px; }
+.rm-days col.rm-col-start { width: 42px; }
+.rm-days col.rm-col-towns { width: auto; }
+.rm-days col.rm-col-n { width: 26px; }
+.rm-days col.rm-col-kms { width: 40px; }
+.rm-days col.rm-col-prod { width: 40px; }
+.rm-days col.rm-col-travel { width: 48px; }
+.rm-days col.rm-col-total { width: 42px; }
+.rm-days.hide-start col.rm-col-start { width: 0; }
 .rm-days th, .rm-days td {
   text-align: left;
-  padding: 2px 3px;
+  padding: 6px 3px;
   border-bottom: 1px solid var(--line);
   vertical-align: top;
+  box-sizing: border-box;
 }
 .rm-days th {
   color: var(--muted);
@@ -665,17 +690,17 @@ td.type-invalid { color: var(--danger); font-weight: 700; }
   letter-spacing: 0;
   white-space: nowrap;
   line-height: 1.15;
+  overflow: hidden;
 }
-.rm-days th:nth-child(1),
-.rm-days td.rm-day-date { width: 78px; white-space: nowrap; }
+.rm-days .rm-fit { white-space: nowrap; }
 .rm-days th.rm-num { text-align: right; white-space: nowrap; }
 .rm-days td.rm-num {
   text-align: right;
   white-space: nowrap;
-  overflow: visible;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
 }
 .rm-col-start {
-  width: 46px;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -695,11 +720,20 @@ td.type-invalid { color: var(--danger); font-weight: 700; }
 .rm-pop:hover { text-decoration: underline; color: var(--accent); }
 .info-card { width: min(720px, 94vw); max-height: 80vh; overflow: auto; }
 .capturing #info-close { display: none; }
+.rm-days th.rm-day-towns,
 .rm-days td.rm-day-towns {
   width: auto;
+  min-width: 0;
   white-space: normal;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  word-break: normal;
+  overflow-wrap: normal;
+  overflow: hidden;
+}
+.town-unit {
+  display: inline-block;
+  white-space: nowrap;
+  vertical-align: top;
+  max-width: 100%;
 }
 .rm-days td.hrs-green { color: #34d399; font-weight: 700; }
 .rm-days td.hrs-amber { color: #fbbf24; font-weight: 700; }
@@ -709,16 +743,15 @@ td.type-invalid { color: var(--danger); font-weight: 700; }
 .town-b { font-size: 0.65em; font-weight: 800; margin-left: 1px; }
 .reason-tag {
   display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  font-size: 0.65rem;
-  font-weight: 750;
-  letter-spacing: 0.01em;
+  margin-left: 4px;
+  padding: 0 3px;
+  border-radius: 4px;
+  font-size: 0.55rem;
+  font-weight: 650;
+  letter-spacing: 0;
   color: #f87171;
-  background: rgba(248, 113, 113, 0.18);
+  background: rgba(248, 113, 113, 0.16);
   white-space: nowrap;
-  vertical-align: middle;
 }
 .rm-kpi-row.sop-over dd { color: var(--danger); }
 .alert-reason { font-size: 0.75rem; color: var(--warn); }

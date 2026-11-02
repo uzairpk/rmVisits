@@ -712,7 +712,7 @@ function drawDateGrid(rows, pack) {
 }
 
 function numCell(cls, value, title) {
-  return '<td class="rm-num' + (cls ? " " + cls : "") + '"' +
+  return '<td class="rm-num rm-fit' + (cls ? " " + cls : "") + '"' +
     (title ? ' title="' + escapeHtml(title) + '"' : "") + ">" + escapeHtml(value) + "</td>";
 }
 
@@ -744,6 +744,12 @@ function townHoursHtml(list, baseTowns) {
   return formatTownsGroupedHtml(list, baseTowns);
 }
 
+function townChipHtml(t, baseTowns) {
+  const tone = t.counted ? "town-ok" : "town-low";
+  const mark = isBaseTownName(t.name, baseTowns) ? '<sup class="town-b">B</sup>' : "";
+  return '<span class="' + tone + '">' + escapeHtml(t.name) + mark + " (" + formatHours(t.hours) + ")</span>";
+}
+
 function formatTownsGroupedHtml(list, baseTowns) {
   if (!list || !list.length) return "—";
   const groups = {};
@@ -754,16 +760,15 @@ function formatTownsGroupedHtml(list, baseTowns) {
   });
   return Object.keys(groups).sort().map((ter) => {
     const towns = groups[ter].slice().sort((a, b) => a.name.localeCompare(b.name));
-    const chips = towns.map((t) => {
-      const tone = t.counted ? "town-ok" : "town-low";
-      const mark = isBaseTownName(t.name, baseTowns) ? '<sup class="town-b">B</sup>' : "";
-      return '<span class="' + tone + '">' + escapeHtml(t.name) + mark + " (" + formatHours(t.hours) + ")</span>";
-    }).join(", ");
-    if (towns.length === 1) {
-      return '<span class="tty-code">' + escapeHtml(ter) + ":</span> " + chips;
-    }
-    const tot = round2(towns.reduce((n, t) => n + (t.hours || 0), 0));
-    return '<span class="tty-code">' + escapeHtml(ter) + " (" + formatHours(tot) + "):</span> " + chips;
+    const prefix = towns.length === 1
+      ? '<span class="tty-code">' + escapeHtml(ter) + ":</span> "
+      : '<span class="tty-code">' + escapeHtml(ter) + " (" +
+        formatHours(round2(towns.reduce((n, t) => n + (t.hours || 0), 0))) + "):</span> ";
+    return towns.map((t, i) => {
+      const head = i === 0 ? prefix : "";
+      const comma = i === 0 ? "" : ", ";
+      return '<span class="town-unit">' + comma + head + townChipHtml(t, baseTowns) + "</span>";
+    }).join("");
   }).join(" · ");
 }
 
@@ -773,7 +778,8 @@ function invalidReasonTags(d) {
   const reason = String(d.invalidReason || "");
   if (/No counted town/i.test(reason) || /No town/i.test(reason)) tags.push("No counted town");
   if (/Total under/i.test(reason) || /Total </i.test(reason)) tags.push("Total < " + SOP.minDayTotalHrs + "h");
-  return tags.map((t) => '<span class="reason-tag">' + escapeHtml(t) + "</span>").join("");
+  if (!tags.length) return "";
+  return " " + tags.map((t) => '<span class="reason-tag">' + escapeHtml(t) + "</span>").join(" ");
 }
 
 const DASH_PREFS_KEY = "rmVisits.dashPrefs";
@@ -823,12 +829,12 @@ function isLateStartDay(d, prefs) {
 function territoryHeaderHtml(s, month) {
   const visited = {};
   (s.territoriesVisited || []).forEach((t) => { visited[String(t).toLowerCase()] = true; });
-  const chips = (s.regionTerritories || []).map((code) => {
+  const codes = (s.regionTerritories || []).map((code) => {
     const ok = !!visited[String(code).toLowerCase()];
-    return '<span class="tty-chip ' + (ok ? "tty-ok" : "tty-miss") + '">' + escapeHtml(code) + "</span>";
-  }).join(" ");
+    return '<span class="' + (ok ? "tty-ok-text" : "tty-miss-text") + '">' + escapeHtml(code) + "</span>";
+  }).join(", ");
   return escapeHtml(s.region || "—") + " · " + escapeHtml(month) +
-    (chips ? " (" + chips + ")" : "");
+    (codes ? " (" + codes + ")" : "");
 }
 
 function xy(part, whole) {
@@ -881,8 +887,8 @@ function drawRmCards(rows, pack) {
       const travelCls = d.travelClamped ? "hrs-flag" : "";
       const startLate = isLateStartDay(d, prefs);
       const start = d.tripStartClock || "";
-      return "<tr><td class=\"rm-day-date\">" + escapeHtml(formatDisplayDate(d.dateISO)) +
-        "</td><td class=\"rm-col-start" + (startLate ? " start-late" : "") + "\">" + escapeHtml(start) +
+      return "<tr><td class=\"rm-day-date rm-fit\">" + escapeHtml(formatDisplayDate(d.dateISO)) +
+        "</td><td class=\"rm-col-start rm-fit" + (startLate ? " start-late" : "") + "\">" + escapeHtml(start) +
         "</td><td class=\"rm-day-towns\">" + townHoursHtml(d.townHours, s.baseTowns) +
         invalidReasonTags(d) + "</td>" +
         numCell("", d.townCount) +
@@ -893,7 +899,7 @@ function drawRmCards(rows, pack) {
     }).join("");
     const colCount = hideStart ? 7 : 8;
     const foot = visitDays.length
-      ? "<tfoot><tr class=\"rm-day-totals\"><td>Totals</td><td class=\"rm-col-start\"></td><td></td>" +
+      ? "<tfoot><tr class=\"rm-day-totals\"><td class=\"rm-fit\">Totals</td><td class=\"rm-col-start rm-fit\"></td><td class=\"rm-day-towns\"></td>" +
         numCell("", s.uniqueTownsVisited) +
         numCell("", formatKms(s.visitKms)) +
         numCell("", formatHours(totProd)) +
@@ -907,10 +913,13 @@ function drawRmCards(rows, pack) {
       "</div><div class=\"rm-card-upto\">Data up to " + escapeHtml(upto ? formatDisplayDate(upto) : "—") +
       "</div></header><div class=\"rm-card-body\"><div class=\"rm-kpis\"><div class=\"rm-kpi-col\">" +
       left + "</div><div class=\"rm-kpi-col\">" + right + "</div></div>" +
-      '<table class="rm-days' + (hideStart ? " hide-start" : "") + '"><thead><tr><th>Date</th>' +
-      '<th class="rm-col-start">Start</th><th>Towns</th><th class="rm-num">#</th>' +
-      '<th class="rm-num">KMs</th><th class="rm-num">Prod</th><th class="rm-num">Travel</th>' +
-      '<th class="rm-num">Total</th></tr></thead><tbody>' +
+      '<table class="rm-days' + (hideStart ? " hide-start" : "") + '"><colgroup>' +
+      '<col class="rm-col-date"><col class="rm-col-start"><col class="rm-col-towns">' +
+      '<col class="rm-col-n"><col class="rm-col-kms"><col class="rm-col-prod">' +
+      '<col class="rm-col-travel"><col class="rm-col-total"></colgroup><thead><tr><th class="rm-fit">Date</th>' +
+      '<th class="rm-col-start rm-fit">Start</th><th class="rm-day-towns">Towns</th><th class="rm-num rm-fit">#</th>' +
+      '<th class="rm-num rm-fit">KMs</th><th class="rm-num rm-fit">Prod</th><th class="rm-num rm-fit">Travel</th>' +
+      '<th class="rm-num rm-fit">Total</th></tr></thead><tbody>' +
       (dayRows || '<tr><td colspan="' + colCount + '" class="rm-day-empty">No field days</td></tr>') +
       "</tbody>" + foot + "</table></div></article>";
   }).join("");
@@ -1293,7 +1302,7 @@ function exportPng(canvas, title) {
   });
 }
 
-function cloneCardForCapture(card) {
+function cloneCardForCapture(card, widthPx) {
   const clone = card.cloneNode(true);
   clone.querySelectorAll(".copy-img-btn").forEach((el) => el.remove());
   const srcCanvas = card.querySelectorAll("canvas");
@@ -1312,6 +1321,16 @@ function cloneCardForCapture(card) {
   clone.style.margin = "0";
   clone.style.position = "static";
   clone.style.transform = "none";
+  clone.style.width = widthPx + "px";
+  clone.style.minWidth = widthPx + "px";
+  clone.style.maxWidth = widthPx + "px";
+  clone.style.height = "auto";
+  clone.style.maxHeight = "none";
+  if (card.classList.contains("rm-report-card")) {
+    clone.style.overflow = "hidden";
+  } else {
+    clone.style.overflow = "visible";
+  }
   return clone;
 }
 
@@ -1323,37 +1342,40 @@ async function copyCardImage(card, btn) {
   const oldLabel = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Copying…";
-  const wraps = card.querySelectorAll(".table-wrap, .date-grid-scroll, .alert-list");
-  wraps.forEach((w) => w.classList.add("capture-expand"));
   const skipBanner = card.classList.contains("rm-report-card") || card.classList.contains("alert-card");
   const title = card.getAttribute("data-copy-title") ||
     ((card.querySelector("h2") && card.querySelector("h2").textContent) || "rmVisits");
   const meta = card.closest("#page-sop")
     ? (SOP.appVersion + " · " + SOP.asOf)
     : captureMeta();
-  let banner = null;
-  if (!skipBanner) {
-    banner = document.createElement("div");
-    banner.className = "capture-banner";
-    banner.innerHTML = "<strong>" + escapeHtml(title) + "</strong><span>" + escapeHtml(meta) + "</span>";
-    card.insertBefore(banner, card.firstChild);
-  }
-  card.classList.add("capturing");
+  const widthPx = Math.max(1, Math.round(card.getBoundingClientRect().width));
   const scale = 2;
   const stage = document.createElement("div");
   stage.className = "copy-stage";
-  const clone = cloneCardForCapture(card);
+  const clone = cloneCardForCapture(card, widthPx);
+  if (!skipBanner) {
+    const banner = document.createElement("div");
+    banner.className = "capture-banner";
+    banner.innerHTML = "<strong>" + escapeHtml(title) + "</strong><span>" + escapeHtml(meta) + "</span>";
+    clone.insertBefore(banner, clone.firstChild);
+  }
   stage.appendChild(clone);
   document.body.appendChild(stage);
   try {
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const w = widthPx;
+    const h = Math.max(clone.scrollHeight, clone.offsetHeight);
     const raw = await html2canvas(clone, {
       backgroundColor: "#0e1522",
       scale: scale,
       useCORS: true,
       logging: false,
       scrollX: 0,
-      scrollY: 0
+      scrollY: 0,
+      width: w,
+      height: h,
+      windowWidth: w,
+      windowHeight: h
     });
     const canvas = padCapturedCanvas(raw, 12, scale);
     const how = await exportPng(canvas, title);
@@ -1364,9 +1386,6 @@ async function copyCardImage(card, btn) {
     btn.textContent = oldLabel;
   }
   stage.remove();
-  if (banner) banner.remove();
-  card.classList.remove("capturing");
-  wraps.forEach((w) => w.classList.remove("capture-expand"));
   btn.disabled = false;
   setTimeout(() => { btn.textContent = oldLabel; }, 2000);
 }

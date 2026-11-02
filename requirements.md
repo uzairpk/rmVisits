@@ -196,6 +196,10 @@ The header row may not be row 1 – detect the row that contains these headers. 
 - Date format everywhere: "12-Oct Mon". Hours: 2 decimals. KMs: no decimals, thousands separator. Numbers right-aligned.
 - Status label "Officework" is displayed as "Office Work" (never "OW").
 - Copy image: captures only that block, tight crop with 12px padding, 2x resolution, no empty space.
+- Copy image of blocks with a scrollbar (pop-ups, long lists): clone the block into an off-screen container with no
+  max-height / overflow and its full natural height (same width), capture the clone, then remove it. The image must
+  contain the full content from title to last item. On screen the pop-up may keep its scrollbar.
+- The dashboard view and the copied image of a block must look identical (same width, same layout).
 
 ### 5.1 KPI cards (keep current ones; replace Green/Red with Valid days; add Base-only not counted, Territories Not Visited)
 
@@ -222,8 +226,10 @@ The header row may not be row 1 – detect the row that contains these headers. 
 - Coloured header only:
   - RM name
   - **Region · Month (territory list)** on one line, e.g. "CEN · Oct 2026 (CHN, FSD, GOR, JHG, JRW, KRW, NNK, SGD, TDW, TTS)".
-    All territories of the RM's region, alphabetical, by code. Visited (≥ 1 Counted Town this month) in GREEN,
-    not visited in RED. Colours must stay readable on every header colour (use a dark chip/pill behind each code if needed).
+    All territories of the RM's region, alphabetical, by code, separated by commas, inside brackets.
+    PLAIN TEXT: same font size and normal weight as "CEN · Oct 2026"; no pills, chips or boxes – only the text colour changes.
+    Visited (≥ 1 Counted Town this month) in DARK GREEN, not visited in DARK RED – shades chosen to stay readable on
+    every header colour (green, amber, red).
   - Base town(s), "Data up to <date>".
   Header colour follows Pace (green On track, amber Slightly behind, red Behind).
   At month end (Data Up To = last day of month) colour by Ach %: green ≥ 100%, amber 70–99%, red < 70%.
@@ -258,7 +264,17 @@ The header row may not be row 1 – detect the row that contains these headers. 
   - TOTAL coloured green if the day is Valid, red if Invalid. PROD and TRAVEL plain.
   - Invalid rows: after the towns, a small red tag with the reason: "No counted town" and/or "Total < 5h".
   - Headers and numbers never wrap; only Towns may wrap and gets the remaining width.
+  - The day table ALWAYS fits exactly inside the card, the same width as the KPI block. Nothing may overflow,
+    be cut off or stick out (on screen or in the copied image).
+  - table-layout: fixed; width: 100%. Fixed widths (approx): Date 92px, Start 50px, # 28px, KMs 52px, Prod 48px,
+    Travel 54px, Total 54px. Towns takes ALL remaining width. Do not use equal column widths.
+  - Towns cell wraps normally, but only BETWEEN units: each unit "TERR: town (hrs)" / "town (hrs)" is a nowrap
+    inline-block, so a town name is never broken. Fallback for a single very long name: overflow-wrap: anywhere.
+    Long days (e.g. 5 towns) wrap onto 2–3 lines inside the card.
+  - Reason tag ("Total < 5h" / "No counted town") is small, a nowrap inline-block, INLINE at the end of the towns text.
+  - Compact rows (about 6px vertical padding). Goal: most days fit on one line.
   - Bold Totals row: # = DISTINCT Counted Towns in the month; KMs and hours = sums.
+- Card width up to 640px if needed so most rows stay on one line.
 - Own Copy image button.
 
 ### 5.5 Day Detail table (per selected RM – compact, no duplicate columns)
@@ -450,4 +466,6 @@ Purpose: show everyone exactly which SOP rules the app applies and how every num
 ## Change log
 | Date | Change |
 |---|---|
+| 02-Nov-2026 | v25: Copy image captures full scrolling content; day table locked to card width (fixed layout, wrap between town units) – fixes last columns cut off on long days |
+| 02-Nov-2026 | v24: RM card table – content-fit number columns, Towns gets remaining width, no breaks inside town names, inline reason tag; header territories plain text with commas, dark green/red |
 | 02-Nov-2026 | v23: same-territory 1.5 hrs rule (per territory, needs 2 towns ≥ 1.5); RM card: territory list in header, territory codes in Towns, Start column + toggle, Late Starts replaces Missing Days, Towns Repeated over 6M, clickable Towns Not Visited / Repeated / Late Starts |
